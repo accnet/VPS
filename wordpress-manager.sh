@@ -130,12 +130,100 @@ function clone_site() {
     sudo -u www-data wp option update siteurl "http://$NEW_SITE" --path="$WEBROOT_NEW"
     sudo -u www-data wp option update home "http://$NEW_SITE" --path="$WEBROOT_NEW"
 
+    # Đặt Permalink Settings về Post name
+    sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT_NEW"
+    sudo -u www-data wp rewrite flush --hard --path="$WEBROOT_NEW"
+
     echo "✅ Đã clone $SRC_SITE thành $NEW_SITE"
 }
 
 function restart_services() {
     sudo systemctl restart nginx php$PHP_VERSION-fpm mariadb
     echo "✅ Đã restart Nginx, PHP-FPM, MariaDB"
+}
+
+function add_site() {
+    read -p "🌐 Nhập domain (VD: site1.local): " DOMAIN
+    DB_NAME="${DOMAIN//./_}_db"
+    DB_USER="${DOMAIN//./_}_user"
+    DB_PASS=$(openssl rand -base64 12)
+    WEBROOT="/var/www/$DOMAIN"
+
+    read -p "👤 Nhập tên tài khoản admin (mặc định: admin): " ADMIN_USER
+    read -p "✉️  Nhập email admin (mặc định: admin@$DOMAIN): " ADMIN_EMAIL
+    read -s -p "🔑 Nhập mật khẩu admin (Enter để tạo ngẫu nhiên): " ADMIN_PASS_INPUT
+    echo ""
+
+    ADMIN_USER=${ADMIN_USER:-admin}
+    ADMIN_EMAIL=${ADMIN_EMAIL:-admin@$DOMAIN}
+    ADMIN_PASS=${ADMIN_PASS_INPUT:-$(openssl rand -base64 10)}
+
+    sudo mkdir -p "$WEBROOT"
+    wget -q https://wordpress.org/latest.tar.gz -O /tmp/latest.tar.gz
+    tar -xzf /tmp/latest.tar.gz -C /tmp
+    sudo cp -r /tmp/wordpress/* "$WEBROOT"
+    sudo chown -R www-data:www-data "$WEBROOT"
+    sudo chmod -R 755 "$WEBROOT"
+
+    sudo mariadb -e "CREATE DATABASE $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    sudo mariadb -e "CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+    sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
+    sudo mariadb -e "FLUSH PRIVILEGES;"
+
+    NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+    sudo tee "$NGINX_CONF" > /dev/null <<EOL
+server {
+    listen 80;
+    server_name $DOMAIN;
+    root $WEBROOT;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOL
+
+    sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+    sudo nginx -t && sudo systemctl reload nginx
+
+    if ! command -v wp &> /dev/null; then
+        curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        chmod +x wp-cli.phar
+        sudo mv wp-cli.phar /usr/local/bin/wp
+    fi
+
+    sudo -u www-data wp core config --dbname="$DB_NAME" --dbuser="$DB_USER" --dbpass="$DB_PASS" --path="$WEBROOT" --skip-check
+    sudo -u www-data wp core install --url="http://$DOMAIN" --title="Website $DOMAIN" --admin_user="$ADMIN_USER" --admin_password="$ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --path="$WEBROOT"
+    sudo -u www-data wp plugin install woocommerce wordpress-seo contact-form-7 classic-editor --activate --path="$WEBROOT"
+
+    sudo -u www-data mkdir -p "$WEBROOT/wp-content/uploads/wc-logs"
+    sudo chmod -R 775 "$WEBROOT/wp-content/uploads/wc-logs"
+    sudo chown -R www-data:www-data "$WEBROOT/wp-content/uploads/wc-logs"
+
+    # Đặt Permalink Settings về Post name
+    sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT"
+
+    # Đổi tên Sample Page thành home và đặt làm trang chủ
+    sudo -u www-data wp post update 2 --post_title='Home' --post_name='home' --path="$WEBROOT"
+    sudo -u www-data wp option update show_on_front 'page' --path="$WEBROOT"
+    sudo -u www-data wp option update page_on_front 2 --path="$WEBROOT"
+    sudo -u www-data wp rewrite flush --hard --path="$WEBROOT"
+
+    echo ""
+    echo "✅ Đã tạo site http://$DOMAIN"
+    echo "📁 Webroot: $WEBROOT"
+    echo "🛠️ DB: $DB_NAME | User: $DB_USER | Pass: $DB_PASS"
+    echo "👤 WP Admin: $ADMIN_USER | Mật khẩu: $ADMIN_PASS"
 }
 
 # === MENU CHÍNH ===
@@ -154,7 +242,7 @@ while true; do
 
     case "$CHOICE" in
         1) [ -f "$LEMP_INSTALLED_FLAG" ] && echo "✅ LEMP đã cài." || install_lemp ;;
-        2) echo "(Chức năng đang đệ trống)" ;;
+        2) add_site ;;
         3) delete_site ;;
         4) restart_services ;;
         5) list_sites ;;
