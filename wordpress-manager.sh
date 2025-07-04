@@ -46,62 +46,66 @@ function list_sites() {
 
     echo "📋 Danh sách site:"
     for i in "${!SITES[@]}"; do
-        echo "$((i+1)
-    if [ -f "$LEMP_INSTALLED_FLAG" ]; then
-        echo "✅ LEMP đã được cài đặt."
-        echo "1. Kiểm tra trạng thái LEMP"
-        echo "2. Cài lại LEMP stack"
-        echo "0. Quay lại menu chính"
-        read -p "🔁 Chọn hành động: " SUBCHOICE
-        case "$SUBCHOICE" in
-            1)
-                echo "✅ LEMP đã được cài đặt trước đó. Bao gồm:"
-                echo "   - Nginx"
-                echo "   - MariaDB"
-                echo "   - PHP $PHP_VERSION và các extension cần thiết"
-                ;;
-            2)
-                echo "♻️ Đang cài lại LEMP stack..."
-                install_lemp
-                ;;
-            0)
-                ;;  # quay lại menu chính
-            *)
-                echo "❌ Lựa chọn không hợp lệ!"
-                ;;
-        esac
-    else
-        echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
-        install_lemp
-    fi
-    ;;
-            2)
-                echo "♻️ Đang cài lại LEMP stack..."
-                install_lemp
-                ;;
-            0)
-                ;;  # quay lại menu chính
-            *)
-                echo "❌ Lựa chọn không hợp lệ!"
-                ;;
-        esac
-    else
-        echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
-        install_lemp
-    fi
-    ;;
-                    0) continue ;;
-                    *) echo "❌ Lựa chọn không hợp lệ!" ;;
+        echo "$((i+1)). ${SITES[$i]}"
+    done
+    echo "0. 🔙 Quay lại menu chính"
+    read -p "👉 Nhấn Enter để quay lại menu... " DUMMY
+}
+
+function restart_services() {
+    sudo systemctl restart nginx php$PHP_VERSION-fpm mariadb
+    echo "✅ Đã restart Nginx, PHP-FPM, MariaDB"
+}
+
+# === MENU CHÍNH ===
+while true; do
+    echo ""
+    echo "========= WORDPRESS MANAGER ========="
+    echo "1. Cài đặt LEMP stack"
+    echo "2. Tạo site WordPress mới"
+    echo "3. Xoá site WordPress"
+    echo "4. Restart dịch vụ"
+    echo "5. Liệt kê site"
+    echo "6. Clone site WordPress"
+    echo "0. Thoát"
+    echo "====================================="
+    read -p "🔛 Nhập lựa chọn: " CHOICE
+
+    case "$CHOICE" in
+        1)
+            if [ -f "$LEMP_INSTALLED_FLAG" ]; then
+                echo "✅ LEMP đã được cài đặt."
+                echo "1. Kiểm tra trạng thái LEMP"
+                echo "2. Cài lại LEMP stack"
+                echo "0. Quay lại menu chính"
+                read -p "🔁 Chọn hành động: " SUBCHOICE
+                case "$SUBCHOICE" in
+                    1)
+                        echo "✅ LEMP đã được cài đặt trước đó. Bao gồm:"
+                        echo "   - Nginx"
+                        echo "   - MariaDB"
+                        echo "   - PHP $PHP_VERSION và các extension cần thiết"
+                        ;;
+                    2)
+                        echo "♻️ Đang cài lại LEMP stack..."
+                        install_lemp
+                        ;;
+                    0)
+                        ;;  # quay lại menu chính
+                    *)
+                        echo "❌ Lựa chọn không hợp lệ!"
+                        ;;
                 esac
             else
+                echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
                 install_lemp
             fi
             ;;
-        2) add_site ;;
-        3) delete_site ;;
+        2) echo "(placeholder: add_site)" ;;
+        3) echo "(placeholder: delete_site)" ;;
         4) restart_services ;;
         5) list_sites ;;
-        6) clone_site ;;
+        6) echo "(placeholder: clone_site)" ;;
         0) echo "👋 Thoát."; exit ;;
         *) echo "❌ Lựa chọn không hợp lệ!" ;;
     esac
