@@ -45,215 +45,31 @@ function list_sites() {
     [ ${#SITES[@]} -eq 0 ] && echo "❌ Không có site nào." && return
 
     echo "📋 Danh sách site:"
-    for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu chính"
-
-    read -p "👉 Nhấn phím bất kỳ để quay lại menu..." DUMMY
-}
-
-function delete_site() {
-    SITES=($(ls /etc/nginx/sites-available | grep -v "default"))
-    [ ${#SITES[@]} -eq 0 ] && echo "❌ Không có site nào." && return
-
-    echo "📋 Danh sách site:"
-    for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu"
-
-    read -p "❌ Nhập số site muốn xoá: " INDEX
-    [[ "$INDEX" == "0" ]] && return
-    INDEX=$((INDEX-1))
-
-    SITE="${SITES[$INDEX]}"
-    [ -z "$SITE" ] && echo "❌ Không hợp lệ." && return
-
-    read -p "Bạn chắc chắn muốn xoá $SITE? (y/N): " CONFIRM
-    [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]] && return
-
-    sudo rm -rf "/var/www/$SITE"
-    sudo rm -f "/etc/nginx/sites-available/$SITE" "/etc/nginx/sites-enabled/$SITE"
-    DB_NAME="${SITE//./_}_db"
-    DB_USER="${SITE//./_}_user"
-    sudo mariadb -e "DROP DATABASE IF EXISTS $DB_NAME;"
-    sudo mariadb -e "DROP USER IF EXISTS '$DB_USER'@'localhost';"
-    sudo nginx -t && sudo systemctl reload nginx
-    echo "✅ Đã xoá site $SITE"
-}
-
-function clone_site() {
-    SITES=($(ls /etc/nginx/sites-available | grep -v "default"))
-    [ ${#SITES[@]} -eq 0 ] && echo "❌ Không có site nào." && return
-
-    echo "📋 Danh sách site:"
-    for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu chính"
-
-    read -p "🔁 Nhập số site nguồn để clone: " SRC_INDEX
-    [[ "$SRC_INDEX" == "0" ]] && return
-    if ! [[ "$SRC_INDEX" =~ ^[0-9]+$ ]] || [ "$SRC_INDEX" -lt 1 ] || [ "$SRC_INDEX" -gt ${#SITES[@]} ]; then
-        echo "❌ Lựa chọn không hợp lệ!"
-        return
-    fi
-    SRC_INDEX=$((SRC_INDEX - 1))
-
-    SRC_SITE="${SITES[$SRC_INDEX]}"
-    [ -z "$SRC_SITE" ] && echo "❌ Không hợp lệ." && return
-
-    read -p "🆕 Nhập domain site mới: " NEW_SITE
-    WEBROOT_NEW="/var/www/$NEW_SITE"
-    WEBROOT_SRC="/var/www/$SRC_SITE"
-
-    DB_SRC="${SRC_SITE//./_}_db"
-    DB_NEW="${NEW_SITE//./_}_db"
-    USER_SRC="${SRC_SITE//./_}_user"
-    USER_NEW="${NEW_SITE//./_}_user"
-    PASS_NEW=$(openssl rand -base64 12)
-
-    sudo cp -r "$WEBROOT_SRC" "$WEBROOT_NEW"
-    sudo chown -R www-data:www-data "$WEBROOT_NEW"
-
-    sudo mariadb -e "CREATE DATABASE $DB_NEW CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    sudo mariadb -e "CREATE USER '$USER_NEW'@'localhost' IDENTIFIED BY '$PASS_NEW';"
-    sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NEW.* TO '$USER_NEW'@'localhost';"
-    sudo mariadb -e "FLUSH PRIVILEGES;"
-    sudo mariadb "$DB_NEW" < <(sudo mariadb-dump "$DB_SRC")
-
-    sudo sed -i "s/'DB_NAME', *'.*'/'DB_NAME', '$DB_NEW'/" "$WEBROOT_NEW/wp-config.php"
-    sudo sed -i "s/'DB_USER', *'.*'/'DB_USER', '$USER_NEW'/" "$WEBROOT_NEW/wp-config.php"
-    sudo sed -i "s/'DB_PASSWORD', *'.*'/'DB_PASSWORD', '$PASS_NEW'/" "$WEBROOT_NEW/wp-config.php"
-
-    sudo cp "/etc/nginx/sites-available/$SRC_SITE" "/etc/nginx/sites-available/$NEW_SITE"
-    sudo sed -i "s/$SRC_SITE/$NEW_SITE/g" "/etc/nginx/sites-available/$NEW_SITE"
-    sudo ln -sf "/etc/nginx/sites-available/$NEW_SITE" "/etc/nginx/sites-enabled/"
-    sudo nginx -t && sudo systemctl reload nginx
-
-    sudo -u www-data mkdir -p "$WEBROOT_NEW/wp-content/uploads/wc-logs"
-    sudo chmod -R 775 "$WEBROOT_NEW/wp-content/uploads/wc-logs"
-    sudo chown -R www-data:www-data "$WEBROOT_NEW/wp-content/uploads/wc-logs"
-
-    sudo -u www-data wp option update siteurl "http://$NEW_SITE" --path="$WEBROOT_NEW"
-    sudo -u www-data wp option update home "http://$NEW_SITE" --path="$WEBROOT_NEW"
-
-    # Đặt Permalink Settings về Post name
-    sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT_NEW"
-    sudo -u www-data wp rewrite flush --hard --path="$WEBROOT_NEW"
-
-    echo "✅ Đã clone $SRC_SITE thành $NEW_SITE"
-}
-
-function restart_services() {
-    sudo systemctl restart nginx php$PHP_VERSION-fpm mariadb
-    echo "✅ Đã restart Nginx, PHP-FPM, MariaDB"
-}
-
-function add_site() {
-    read -p "🌐 Nhập domain (VD: site1.local): " DOMAIN
-    DB_NAME="${DOMAIN//./_}_db"
-    DB_USER="${DOMAIN//./_}_user"
-    DB_PASS=$(openssl rand -base64 12)
-    WEBROOT="/var/www/$DOMAIN"
-
-    read -p "👤 Nhập tên tài khoản admin (mặc định: admin): " ADMIN_USER
-    read -p "✉️  Nhập email admin (mặc định: admin@$DOMAIN): " ADMIN_EMAIL
-    read -s -p "🔑 Nhập mật khẩu admin (Enter để tạo ngẫu nhiên): " ADMIN_PASS_INPUT
-    echo ""
-
-    ADMIN_USER=${ADMIN_USER:-admin}
-    ADMIN_EMAIL=${ADMIN_EMAIL:-admin@$DOMAIN}
-    ADMIN_PASS=${ADMIN_PASS_INPUT:-$(openssl rand -base64 10)}
-
-    sudo mkdir -p "$WEBROOT"
-    wget -q https://wordpress.org/latest.tar.gz -O /tmp/latest.tar.gz
-    tar -xzf /tmp/latest.tar.gz -C /tmp
-    sudo cp -r /tmp/wordpress/* "$WEBROOT"
-    sudo chown -R www-data:www-data "$WEBROOT"
-    sudo chmod -R 755 "$WEBROOT"
-
-    sudo mariadb -e "CREATE DATABASE $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    sudo mariadb -e "CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
-    sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
-    sudo mariadb -e "FLUSH PRIVILEGES;"
-
-    NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
-    sudo tee "$NGINX_CONF" > /dev/null <<EOL
-server {
-    listen 80;
-    server_name $DOMAIN;
-    root $WEBROOT;
-    index index.php index.html;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$args;
-    }
-
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
-    }
-
-    location ~ /\.ht {
-        deny all;
-    }
-}
-EOL
-
-    sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
-    sudo nginx -t && sudo systemctl reload nginx
-
-    if ! command -v wp &> /dev/null; then
-        curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-        chmod +x wp-cli.phar
-        sudo mv wp-cli.phar /usr/local/bin/wp
-    fi
-
-    sudo -u www-data wp core config --dbname="$DB_NAME" --dbuser="$DB_USER" --dbpass="$DB_PASS" --path="$WEBROOT" --skip-check
-    sudo -u www-data wp core install --url="http://$DOMAIN" --title="Website $DOMAIN" --admin_user="$ADMIN_USER" --admin_password="$ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --path="$WEBROOT"
-    sudo -u www-data wp plugin install woocommerce wordpress-seo contact-form-7 classic-editor --activate --path="$WEBROOT"
-
-    sudo -u www-data mkdir -p "$WEBROOT/wp-content/uploads/wc-logs"
-    sudo chmod -R 775 "$WEBROOT/wp-content/uploads/wc-logs"
-    sudo chown -R www-data:www-data "$WEBROOT/wp-content/uploads/wc-logs"
-
-    # Đặt Permalink Settings về Post name
-    sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT"
-
-    # Đổi tên Sample Page thành home và đặt làm trang chủ
-    sudo -u www-data wp post update 2 --post_title='Home' --post_name='home' --path="$WEBROOT"
-    sudo -u www-data wp option update show_on_front 'page' --path="$WEBROOT"
-    sudo -u www-data wp option update page_on_front 2 --path="$WEBROOT"
-    sudo -u www-data wp rewrite flush --hard --path="$WEBROOT"
-
-    echo ""
-    echo "✅ Đã tạo site http://$DOMAIN"
-    echo "📁 Webroot: $WEBROOT"
-    echo "🛠️ DB: $DB_NAME | User: $DB_USER | Pass: $DB_PASS"
-    echo "👤 WP Admin: $ADMIN_USER | Mật khẩu: $ADMIN_PASS"
-}
-
-# === MENU CHÍNH ===
-while true; do
-    echo ""
-    echo "========= WORDPRESS MANAGER ========="
-    echo "1. Cài đặt LEMP stack"
-    echo "2. Tạo site WordPress mới"
-    echo "3. Xoá site WordPress"
-    echo "4. Restart dịch vụ"
-    echo "5. Liệt kê site"
-    echo "6. Clone site WordPress"
-    echo "0. Thoát"
-    echo "====================================="
-    read -p "🔛 Nhập lựa chọn: " CHOICE
-
-    case "$CHOICE" in
-        1)
-            if [ -f "$LEMP_INSTALLED_FLAG" ]; then
-                echo "✅ LEMP đã được cài đặt."
-                echo "1. Kiểm tra trạng thái LEMP"
-                echo "2. Cài lại LEMP stack"
-                echo "0. Quay lại menu chính"
-                read -p "🔁 Chọn hành động: " SUBCHOICE
-                case "$SUBCHOICE" in
-                    1) echo "✅ LEMP stack đã được cài." ;;
-                    2) install_lemp ;;
+    for i in "${!SITES[@]}"; do echo "$((i+1)
+    if [ -f "$LEMP_INSTALLED_FLAG" ]; then
+        echo "✅ LEMP đã được cài đặt."
+        echo "1. Kiểm tra trạng thái LEMP"
+        echo "2. Cài lại LEMP stack"
+        echo "0. Quay lại menu chính"
+        read -p "🔁 Chọn hành động: " SUBCHOICE
+        case "$SUBCHOICE" in
+            1)
+                echo "✅ LEMP đã được cài đặt trước đó. Bao gồm:"
+                echo "   - Nginx"
+                echo "   - MariaDB"
+                echo "   - PHP $PHP_VERSION và các extension cần thiết"
+                ;;
+            2)
+                echo "♻️ Đang cài lại LEMP stack..."
+                install_lemp
+                ;;
+            0) continue ;;
+            *) echo "❌ Lựa chọn không hợp lệ!" ;;
+        esac
+    else
+        echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
+        install_lemp
+    fi ;;
                     0) continue ;;
                     *) echo "❌ Lựa chọn không hợp lệ!" ;;
                 esac
