@@ -96,7 +96,40 @@ function clone_site() {
     [ -z "$SRC_SITE" ] && echo "❌ Không hợp lệ." && return
 
     read -p "🆕 Nhập domain site mới: " NEW_SITE
-    # Clone logic (các bước cài webroot, db, config... ở đây)
+    WEBROOT_NEW="/var/www/$NEW_SITE"
+    WEBROOT_SRC="/var/www/$SRC_SITE"
+
+    DB_SRC="${SRC_SITE//./_}_db"
+    DB_NEW="${NEW_SITE//./_}_db"
+    USER_SRC="${SRC_SITE//./_}_user"
+    USER_NEW="${NEW_SITE//./_}_user"
+    PASS_NEW=$(openssl rand -base64 12)
+
+    sudo cp -r "$WEBROOT_SRC" "$WEBROOT_NEW"
+    sudo chown -R www-data:www-data "$WEBROOT_NEW"
+
+    sudo mariadb -e "CREATE DATABASE $DB_NEW CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    sudo mariadb -e "CREATE USER '$USER_NEW'@'localhost' IDENTIFIED BY '$PASS_NEW';"
+    sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NEW.* TO '$USER_NEW'@'localhost';"
+    sudo mariadb -e "FLUSH PRIVILEGES;"
+    sudo mariadb "$DB_NEW" < <(sudo mariadb-dump "$DB_SRC")
+
+    sudo sed -i "s/'DB_NAME', *'.*'/'DB_NAME', '$DB_NEW'/" "$WEBROOT_NEW/wp-config.php"
+    sudo sed -i "s/'DB_USER', *'.*'/'DB_USER', '$USER_NEW'/" "$WEBROOT_NEW/wp-config.php"
+    sudo sed -i "s/'DB_PASSWORD', *'.*'/'DB_PASSWORD', '$PASS_NEW'/" "$WEBROOT_NEW/wp-config.php"
+
+    sudo cp "/etc/nginx/sites-available/$SRC_SITE" "/etc/nginx/sites-available/$NEW_SITE"
+    sudo sed -i "s/$SRC_SITE/$NEW_SITE/g" "/etc/nginx/sites-available/$NEW_SITE"
+    sudo ln -sf "/etc/nginx/sites-available/$NEW_SITE" "/etc/nginx/sites-enabled/"
+    sudo nginx -t && sudo systemctl reload nginx
+
+    sudo -u www-data mkdir -p "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+    sudo chmod -R 775 "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+    sudo chown -R www-data:www-data "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+
+    sudo -u www-data wp option update siteurl "http://$NEW_SITE" --path="$WEBROOT_NEW"
+    sudo -u www-data wp option update home "http://$NEW_SITE" --path="$WEBROOT_NEW"
+
     echo "✅ Đã clone $SRC_SITE thành $NEW_SITE"
 }
 
