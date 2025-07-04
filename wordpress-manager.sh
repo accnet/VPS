@@ -18,7 +18,10 @@ function install_lemp() {
     sudo apt update
 
     sudo apt install -y nginx mariadb-server php$PHP_VERSION php$PHP_VERSION-fpm php$PHP_VERSION-mysql \
-        php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring php$PHP_VERSION-zip unzip wget curl
+        php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring php$PHP_VERSION-zip \
+        php$PHP_VERSION-gd php$PHP_VERSION-intl php$PHP_VERSION-bcmath php$PHP_VERSION-soap \
+        php$PHP_VERSION-imagick php$PHP_VERSION-exif php$PHP_VERSION-opcache php$PHP_VERSION-cli php$PHP_VERSION-readline \
+        unzip wget curl
 
     echo "🔀 Tăng cấu hình PHP..."
     sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 512M/' /etc/php/$PHP_VERSION/fpm/php.ini
