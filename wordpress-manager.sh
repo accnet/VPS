@@ -46,13 +46,7 @@ function list_sites() {
 
     echo "📋 Danh sách site:"
     for i in "${!SITES[@]}"; do
-        echo "$((i+1)). ${SITES[$i]}"
-    done
-    echo "0. 🔙 Quay lại menu chính"
-    read -p "👉 Nhấn Enter để quay lại menu... " DUMMY
-}
-
-1)
+        echo "$((i+1)
     if [ -f "$LEMP_INSTALLED_FLAG" ]; then
         echo "✅ LEMP đã được cài đặt."
         echo "1. Kiểm tra trạng thái LEMP"
@@ -66,6 +60,21 @@ function list_sites() {
                 echo "   - MariaDB"
                 echo "   - PHP $PHP_VERSION và các extension cần thiết"
                 ;;
+            2)
+                echo "♻️ Đang cài lại LEMP stack..."
+                install_lemp
+                ;;
+            0)
+                ;;  # quay lại menu chính
+            *)
+                echo "❌ Lựa chọn không hợp lệ!"
+                ;;
+        esac
+    else
+        echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
+        install_lemp
+    fi
+    ;;
             2)
                 echo "♻️ Đang cài lại LEMP stack..."
                 install_lemp
