@@ -45,9 +45,11 @@ function list_sites() {
     [ ${#SITES[@]} -eq 0 ] && echo "❌ Không có site nào." && return
 
     echo "📋 Danh sách site:"
-    for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
+    for i in "${!SITES[@]}"; do
+        echo "$((i+1)). ${SITES[$i]}"
+    done
     echo "0. 🔙 Quay lại menu chính"
-    read -p "👉 Nhấn Enter để quay lại menu..." DUMMY
+    read -p "👉 Nhấn Enter để quay lại menu... " DUMMY
 }
 
 1)
@@ -69,8 +71,7 @@ function list_sites() {
                 install_lemp
                 ;;
             0)
-                return
-                ;;
+                ;;  # quay lại menu chính
             *)
                 echo "❌ Lựa chọn không hợp lệ!"
                 ;;
