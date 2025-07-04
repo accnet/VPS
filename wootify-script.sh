@@ -171,6 +171,7 @@ while true; do
     echo "4. Restart dịch vụ"
     echo "5. Liệt kê site"
     echo "6. Clone site WordPress"
+    echo "7. Cài đặt SSL cho site"
     echo "0. Thoát"
     echo "====================================="
     read -p "🔛 Nhập lựa chọn: " CHOICE
@@ -206,6 +207,33 @@ while true; do
             fi
             ;;
         2) create_site ;;
+        7)
+            echo "📋 Danh sách các site có sẵn:"
+            SITES=($(ls /etc/nginx/sites-available | grep -v "default"))
+            if [ ${#SITES[@]} -eq 0 ]; then
+                echo "❌ Không có site nào để cài đặt SSL."
+                break
+            fi
+
+            for i in "${!SITES[@]}"; do
+                echo "$((i+1)). ${SITES[$i]}"
+            done
+            echo "0. 🔙 Quay lại menu chính"
+
+            read -p "👉 Nhập số thứ tự của site bạn muốn cài đặt SSL: " SITE_INDEX
+            if [[ "$SITE_INDEX" == "0" ]]; then
+                continue
+            fi
+
+            SITE_INDEX=$((SITE_INDEX - 1))
+            SITE="${SITES[$SITE_INDEX]}"
+            if [ -z "$SITE" ]; then
+                echo "❌ Lựa chọn không hợp lệ."
+                continue
+            fi
+
+            install_ssl "$SITE"
+            ;;
         0) echo "👋 Thoát."; exit ;;
         *) echo "❌ Lựa chọn không hợp lệ!" ;;
     esac
