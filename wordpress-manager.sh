@@ -101,11 +101,197 @@ while true; do
                 install_lemp
             fi
             ;;
-        2) echo "(placeholder: add_site)" ;;
-        3) echo "(placeholder: delete_site)" ;;
+        2)
+            echo "🌐 Tạo site WordPress mới"
+            read -p "Nhập domain (VD: site1.local): " DOMAIN
+            WEBROOT="/var/www/$DOMAIN"
+            DB_NAME="${DOMAIN//./_}_db"
+            DB_USER="${DOMAIN//./_}_user"
+            DB_PASS=$(openssl rand -base64 12)
+
+            read -p "👤 Nhập tên tài khoản admin (mặc định: admin): " ADMIN_USER
+            read -p "📧 Nhập email admin (mặc định: admin@$DOMAIN): " ADMIN_EMAIL
+            read -s -p "🔑 Nhập mật khẩu admin (Enter để tạo ngẫu nhiên): " ADMIN_PASS_INPUT
+            echo
+
+            ADMIN_USER=${ADMIN_USER:-admin}
+            ADMIN_EMAIL=${ADMIN_EMAIL:-admin@$DOMAIN}
+            ADMIN_PASS=${ADMIN_PASS_INPUT:-$(openssl rand -base64 10)}
+
+            sudo mkdir -p "$WEBROOT"
+            wget -q https://wordpress.org/latest.tar.gz -O /tmp/latest.tar.gz
+            tar -xzf /tmp/latest.tar.gz -C /tmp
+            sudo cp -r /tmp/wordpress/* "$WEBROOT"
+            sudo chown -R www-data:www-data "$WEBROOT"
+            sudo chmod -R 755 "$WEBROOT"
+
+            sudo mariadb -e "CREATE DATABASE $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+            sudo mariadb -e "CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+            sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
+            sudo mariadb -e "FLUSH PRIVILEGES;"
+
+            NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+            sudo tee "$NGINX_CONF" > /dev/null <<EOL
+server {
+    listen 80;
+    server_name $DOMAIN;
+    root $WEBROOT;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOL
+
+            sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+            sudo nginx -t && sudo systemctl reload nginx
+
+            if ! command -v wp &> /dev/null; then
+                curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+                chmod +x wp-cli.phar
+                sudo mv wp-cli.phar /usr/local/bin/wp
+            fi
+
+            sudo -u www-data wp core config --dbname="$DB_NAME" --dbuser="$DB_USER" --dbpass="$DB_PASS" --path="$WEBROOT" --skip-check
+            sudo -u www-data wp core install --url="http://$DOMAIN" --title="Website $DOMAIN" --admin_user="$ADMIN_USER" --admin_password="$ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --path="$WEBROOT"
+            sudo -u www-data wp plugin install woocommerce wordpress-seo contact-form-7 classic-editor --activate --path="$WEBROOT"
+
+            sudo -u www-data mkdir -p "$WEBROOT/wp-content/uploads/wc-logs"
+            sudo chmod -R 775 "$WEBROOT/wp-content/uploads/wc-logs"
+            sudo chown -R www-data:www-data "$WEBROOT/wp-content/uploads/wc-logs"
+
+            sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT"
+            sudo -u www-data wp rewrite flush --hard --path="$WEBROOT"
+            sudo -u www-data wp post update 2 --post_title='Home' --post_name='home' --path="$WEBROOT"
+            sudo -u www-data wp option update show_on_front 'page' --path="$WEBROOT"
+            sudo -u www-data wp option update page_on_front 2 --path="$WEBROOT"
+
+            echo "✅ Đã tạo site http://$DOMAIN"
+            echo "📁 Webroot: $WEBROOT"
+            echo "🛠️ DB: $DB_NAME | User: $DB_USER | Pass: $DB_PASS"
+            echo "👤 WP Admin: $ADMIN_USER | Mật khẩu: $ADMIN_PASS"
+            ;;
+        3)
+            SITES=($(ls /etc/nginx/sites-available | grep -v "default"))
+            if [ ${#SITES[@]} -eq 0 ]; then
+                echo "❌ Không có site nào để xoá."
+                break
+            fi
+
+            echo "🗑 Danh sách site:"
+            for i in "${!SITES[@]}"; do
+                echo "$((i+1)). ${SITES[$i]}"
+            done
+            echo "0. 🔙 Quay lại menu chính"
+            read -p "❌ Nhập số thứ tự site muốn xoá: " DEL_INDEX
+
+            if [[ "$DEL_INDEX" == "0" ]]; then
+                continue
+            fi
+
+            DEL_INDEX=$((DEL_INDEX - 1))
+            SITE="${SITES[$DEL_INDEX]}"
+            if [ -z "$SITE" ]; then
+                echo "❌ Lựa chọn không hợp lệ."
+                continue
+            fi
+
+            read -p "Bạn có chắc chắn muốn xoá site '$SITE'? (y/N): " CONFIRM
+            if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+                echo "🚫 Đã huỷ xoá."
+                continue
+            fi
+
+            sudo rm -rf "/var/www/$SITE"
+            sudo rm -f "/etc/nginx/sites-available/$SITE" "/etc/nginx/sites-enabled/$SITE"
+            DB_NAME="${SITE//./_}_db"
+            DB_USER="${SITE//./_}_user"
+            sudo mariadb -e "DROP DATABASE IF EXISTS $DB_NAME;"
+            sudo mariadb -e "DROP USER IF EXISTS '$DB_USER'@'localhost';"
+            sudo nginx -t && sudo systemctl reload nginx
+
+            echo "✅ Đã xoá site '$SITE' thành công."
+            ;;
         4) restart_services ;;
         5) list_sites ;;
-        6) echo "(placeholder: clone_site)" ;;
+        6)
+            SITES=($(ls /etc/nginx/sites-available | grep -v "default"))
+            if [ ${#SITES[@]} -eq 0 ]; then
+                echo "❌ Không có site nào để clone."
+                break
+            fi
+
+            echo "📋 Danh sách site hiện có:"
+            for i in "${!SITES[@]}"; do
+                echo "$((i+1)). ${SITES[$i]}"
+            done
+            echo "0. 🔙 Quay lại menu chính"
+            read -p "🔁 Nhập số thứ tự site nguồn để clone: " SRC_INDEX
+            if [[ "$SRC_INDEX" == "0" ]]; then
+                continue
+            fi
+
+            SRC_INDEX=$((SRC_INDEX - 1))
+            SRC_SITE="${SITES[$SRC_INDEX]}"
+            if [ -z "$SRC_SITE" ]; then
+                echo "❌ Lựa chọn không hợp lệ."
+                continue
+            fi
+
+            read -p "🆕 Nhập domain site mới: " NEW_SITE
+            WEBROOT_NEW="/var/www/$NEW_SITE"
+            WEBROOT_SRC="/var/www/$SRC_SITE"
+
+            DB_SRC="${SRC_SITE//./_}_db"
+            DB_NEW="${NEW_SITE//./_}_db"
+            USER_SRC="${SRC_SITE//./_}_user"
+            USER_NEW="${NEW_SITE//./_}_user"
+            PASS_NEW=$(openssl rand -base64 12)
+
+            sudo cp -r "$WEBROOT_SRC" "$WEBROOT_NEW"
+            sudo chown -R www-data:www-data "$WEBROOT_NEW"
+
+            sudo mariadb -e "CREATE DATABASE $DB_NEW CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+            sudo mariadb -e "CREATE USER '$USER_NEW'@'localhost' IDENTIFIED BY '$PASS_NEW';"
+            sudo mariadb -e "GRANT ALL PRIVILEGES ON $DB_NEW.* TO '$USER_NEW'@'localhost';"
+            sudo mariadb -e "FLUSH PRIVILEGES;"
+            sudo mariadb "$DB_NEW" < <(sudo mariadb-dump "$DB_SRC")
+
+            sudo sed -i "s/'DB_NAME', *'.*'/'DB_NAME', '$DB_NEW'/" "$WEBROOT_NEW/wp-config.php"
+            sudo sed -i "s/'DB_USER', *'.*'/'DB_USER', '$USER_NEW'/" "$WEBROOT_NEW/wp-config.php"
+            sudo sed -i "s/'DB_PASSWORD', *'.*'/'DB_PASSWORD', '$PASS_NEW'/" "$WEBROOT_NEW/wp-config.php"
+
+            sudo cp "/etc/nginx/sites-available/$SRC_SITE" "/etc/nginx/sites-available/$NEW_SITE"
+            sudo sed -i "s/$SRC_SITE/$NEW_SITE/g" "/etc/nginx/sites-available/$NEW_SITE"
+            sudo ln -sf "/etc/nginx/sites-available/$NEW_SITE" "/etc/nginx/sites-enabled/"
+            sudo nginx -t && sudo systemctl reload nginx
+
+            sudo -u www-data wp option update siteurl "http://$NEW_SITE" --path="$WEBROOT_NEW"
+            sudo -u www-data wp option update home "http://$NEW_SITE" --path="$WEBROOT_NEW"
+            sudo -u www-data wp rewrite structure '/%postname%/' --path="$WEBROOT_NEW"
+            sudo -u www-data wp rewrite flush --hard --path="$WEBROOT_NEW"
+            sudo -u www-data wp post update 2 --post_title='Home' --post_name='home' --path="$WEBROOT_NEW"
+            sudo -u www-data wp option update show_on_front 'page' --path="$WEBROOT_NEW"
+            sudo -u www-data wp option update page_on_front 2 --path="$WEBROOT_NEW"
+
+            sudo -u www-data mkdir -p "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+            sudo chmod -R 775 "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+            sudo chown -R www-data:www-data "$WEBROOT_NEW/wp-content/uploads/wc-logs"
+
+            echo "✅ Đã clone $SRC_SITE thành $NEW_SITE"
+            echo "🌐 http://$NEW_SITE"
+            echo "🛠️ DB: $DB_NEW | User: $USER_NEW | Pass: $PASS_NEW"
+            ;;
         0) echo "👋 Thoát."; exit ;;
         *) echo "❌ Lựa chọn không hợp lệ!" ;;
     esac
