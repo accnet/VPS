@@ -68,8 +68,12 @@ function list_sites() {
                 echo "♻️ Đang cài lại LEMP stack..."
                 install_lemp
                 ;;
-            0) continue ;;
-            *) echo "❌ Lựa chọn không hợp lệ!" ;;
+            0)
+                return
+                ;;
+            *)
+                echo "❌ Lựa chọn không hợp lệ!"
+                ;;
         esac
     else
         echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
