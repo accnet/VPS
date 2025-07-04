@@ -244,7 +244,23 @@ while true; do
     read -p "🔛 Nhập lựa chọn: " CHOICE
 
     case "$CHOICE" in
-        1) [ -f "$LEMP_INSTALLED_FLAG" ] && echo "✅ LEMP đã cài." || install_lemp ;;
+        1)
+            if [ -f "$LEMP_INSTALLED_FLAG" ]; then
+                echo "✅ LEMP đã được cài đặt."
+                echo "1. Kiểm tra trạng thái LEMP"
+                echo "2. Cài lại LEMP stack"
+                echo "0. Quay lại menu chính"
+                read -p "🔁 Chọn hành động: " SUBCHOICE
+                case "$SUBCHOICE" in
+                    1) echo "✅ LEMP stack đã được cài." ;;
+                    2) install_lemp ;;
+                    0) continue ;;
+                    *) echo "❌ Lựa chọn không hợp lệ!" ;;
+                esac
+            else
+                install_lemp
+            fi
+            ;;
         2) add_site ;;
         3) delete_site ;;
         4) restart_services ;;
