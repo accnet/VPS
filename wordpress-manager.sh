@@ -43,8 +43,9 @@ function list_sites() {
 
     echo "📋 Danh sách site:"
     for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu"
-    read -p "🔁 Nhấn Enter để quay lại menu..." DUMMY
+    echo "0. 🔙 Quay lại menu chính"
+
+    read -p "👉 Nhấn phím bất kỳ để quay lại menu..." DUMMY
 }
 
 function delete_site() {
@@ -81,10 +82,14 @@ function clone_site() {
 
     echo "📋 Danh sách site:"
     for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu"
+    echo "0. 🔙 Quay lại menu chính"
 
     read -p "🔁 Nhập số site nguồn để clone: " SRC_INDEX
     [[ "$SRC_INDEX" == "0" ]] && return
+    if ! [[ "$SRC_INDEX" =~ ^[0-9]+$ ]] || [ "$SRC_INDEX" -lt 1 ] || [ "$SRC_INDEX" -gt ${#SITES[@]} ]; then
+        echo "❌ Lựa chọn không hợp lệ!"
+        return
+    fi
     SRC_INDEX=$((SRC_INDEX - 1))
 
     SRC_SITE="${SITES[$SRC_INDEX]}"
