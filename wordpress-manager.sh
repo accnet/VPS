@@ -45,12 +45,7 @@ function list_sites() {
     [ ${#SITES[@]} -eq 0 ] && echo "❌ Không có site nào." && return
 
     echo "📋 Danh sách site:"
-    for i in "${!SITES[@]}"; do echo "$((i+1)). ${SITES[$i]}"; done
-    echo "0. 🔙 Quay lại menu chính"
-    read -p "👉 Nhấn phím bất kỳ để quay lại menu..." DUMMY
-}
-
-1)
+    for i in "${!SITES[@]}"; do echo "$((i+1)
     if [ -f "$LEMP_INSTALLED_FLAG" ]; then
         echo "✅ LEMP đã được cài đặt."
         echo "1. Kiểm tra trạng thái LEMP"
@@ -74,7 +69,8 @@ function list_sites() {
     else
         echo "📦 LEMP chưa được cài. Đang tiến hành cài đặt..."
         install_lemp
-    fi ;;
+    fi
+    ;;
                     0) continue ;;
                     *) echo "❌ Lựa chọn không hợp lệ!" ;;
                 esac
