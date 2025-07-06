@@ -25,6 +25,9 @@ function install_lemp() {
     echo "🔀 Tăng cấu hình PHP..."
     if [ -f /etc/php/$PHP_VERSION/fpm/php.ini ]; then
         sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 512M/' /etc/php/$PHP_VERSION/fpm/php.ini
+        sudo sed -i 's/^max_input_vars = .*/max_input_vars = 5000/' /etc/php/$PHP_VERSION/fpm/php.ini
+        sudo sed -i 's/^realpath_cache_size = .*/realpath_cache_size = 4096k/' /etc/php/$PHP_VERSION/fpm/php.ini
+        sudo sed -i 's/^realpath_cache_ttl = .*/realpath_cache_ttl = 600/' /etc/php/$PHP_VERSION/fpm/php.ini
         sudo sed -i 's/^post_max_size = .*/post_max_size = 512M/' /etc/php/$PHP_VERSION/fpm/php.ini
         sudo sed -i 's/^max_execution_time = .*/max_execution_time = 300/' /etc/php/$PHP_VERSION/fpm/php.ini
         sudo sed -i 's/^max_input_time = .*/max_input_time = 300/' /etc/php/$PHP_VERSION/fpm/php.ini
@@ -39,11 +42,11 @@ function install_lemp() {
         sudo systemctl restart php$PHP_VERSION-fpm
     fi
 
-    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_children = .*/pm.max_children = 20/' "$PHP_FPM_POOL"
-    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.start_servers = .*/pm.start_servers = 6/' "$PHP_FPM_POOL"
-    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.min_spare_servers = .*/pm.min_spare_servers = 4/' "$PHP_FPM_POOL"
-    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_spare_servers = .*/pm.max_spare_servers = 10/' "$PHP_FPM_POOL"
-    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_requests = .*/pm.max_requests = 500/' "$PHP_FPM_POOL"
+    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_children = .*/pm.max_children = 50/' "$PHP_FPM_POOL"
+    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.start_servers = .*/pm.start_servers = 14/' "$PHP_FPM_POOL"
+    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.min_spare_servers = .*/pm.min_spare_servers = 8/' "$PHP_FPM_POOL"
+    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_spare_servers = .*/pm.max_spare_servers = 20/' "$PHP_FPM_POOL"
+    [ -f "$PHP_FPM_POOL" ] && sudo sed -i 's/^;*pm.max_requests = .*/pm.max_requests = 2000/' "$PHP_FPM_POOL"
 
     [ -f /etc/nginx/nginx.conf ] && sudo sed -i 's/^worker_connections .*/worker_connections 10240;/' /etc/nginx/nginx.conf
     if [ -f /etc/nginx/nginx.conf ] && ! grep -q 'sendfile on;' /etc/nginx/nginx.conf; then
@@ -52,11 +55,11 @@ function install_lemp() {
     tcp_nopush on;\
     tcp_nodelay on;\
     server_tokens off;\
-    keepalive_timeout 30;\
-    types_hash_max_size 2048;\
-    client_body_buffer_size 128K;\
-    client_header_buffer_size 1k;\
-    large_client_header_buffers 4 8k;' /etc/nginx/nginx.conf
+    keepalive_timeout 60;\
+    types_hash_max_size 4096;\
+    client_body_buffer_size 256K;\
+    client_header_buffer_size 2k;\
+    large_client_header_buffers 4 16k;' /etc/nginx/nginx.conf
 fi
 
     if [ -f /etc/nginx/nginx.conf ] && ! grep -q 'gzip on;' /etc/nginx/nginx.conf; then
@@ -170,6 +173,14 @@ while true; do
             NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
             sudo tee "$NGINX_CONF" > /dev/null <<EOL
 server {
+    gzip on;
+    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
     listen 80;
     server_name $DOMAIN;
     root $WEBROOT;
