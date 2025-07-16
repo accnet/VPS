@@ -3,7 +3,7 @@
 # ==============================================================================
 # Script Quản lý WordPress trên RHEL Stack (AlmaLinux)
 #
-# Phiên bản: 4.2-RHEL (Sửa lỗi 413 Request Entity Too Large)
+# Phiên bản: 4.3-RHEL (Tăng giới hạn thời gian thực thi PHP)
 #
 # Các tính năng chính:
 # - Cài đặt LEMP, tạo/xóa/clone/liệt kê site, cài SSL, restart dịch vụ.
@@ -95,8 +95,10 @@ function install_lemp() {
     if [ -f "$php_ini_path" ]; then
         sudo sed -i 's/^;*upload_max_filesize = .*/upload_max_filesize = 512M/' "$php_ini_path"
         sudo sed -i 's/^;*post_max_size = .*/post_max_size = 512M/' "$php_ini_path"
-        sudo sed -i 's/^;*max_execution_time = .*/max_execution_time = 300/' "$php_ini_path"
-        sudo sed -i 's/^;*max_input_time = .*/max_input_time = 300/' "$php_ini_path"
+        # --- THAY ĐỔI GIÁ TRỊ THỜI GIAN THỰC THI ---
+        sudo sed -i 's/^;*max_execution_time = .*/max_execution_time = 1800/' "$php_ini_path"
+        sudo sed -i 's/^;*max_input_time = .*/max_input_time = 1800/' "$php_ini_path"
+        # --- KẾT THÚC THAY ĐỔI ---
         sudo sed -i 's/^;*memory_limit = .*/memory_limit = 1024M/' "$php_ini_path"
     fi
     
@@ -105,13 +107,10 @@ function install_lemp() {
     sudo sed -i 's/^\s*worker_connections\s*.*/    worker_connections 10240;/' "$nginx_conf_path"
     sudo sed -i 's/^\s*user\s*.*/user nginx;/' "$nginx_conf_path"
 
-    # --- SỬA LỖI 413 REQUEST ENTITY TOO LARGE ---
     if ! grep -q "client_max_body_size" "$nginx_conf_path"; then
         info "Tăng giới hạn upload file cho Nginx..."
-        # Chèn vào trong khối http {}
         sudo sed -i '/http {/a \    client_max_body_size 512M;' "$nginx_conf_path"
     fi
-    # --- KẾT THÚC SỬA LỖI ---
 
 
     info "Kiểm tra và cấu hình tường lửa (firewalld)..."
@@ -217,7 +216,6 @@ server {
     root $webroot;
     index index.php index.html;
 
-    # Tăng giới hạn upload cho riêng site này nếu cần
     # client_max_body_size 512M;
 
     location / {
@@ -376,10 +374,8 @@ function clone_site() {
     local src_site_user="$src_domain"
     local new_site_user="$new_domain"
 
-    # Lấy thông tin DB từ site nguồn
     local src_db_name; src_db_name=$(sudo -u "$src_site_user" "$WP_CLI_PATH" config get DB_NAME --path="$src_webroot")
 
-    # Tạo thông tin DB mới
     local random_suffix; random_suffix=$(openssl rand -hex 4)
     local new_safe_domain; new_safe_domain=$(echo "${new_domain//./_}")
     local new_db_name; new_db_name=$(echo "${new_safe_domain}" | cut -c -55)_${random_suffix}
@@ -472,7 +468,7 @@ function restart_services() {
 function main_menu() {
     while true; do
         clear
-        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.2-RHEL) =========${C_RESET}"
+        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.3-RHEL) =========${C_RESET}"
         echo "1. Cài đặt LEMP stack"
         echo "2. Tạo site WordPress mới"
         echo -e "${C_YELLOW}3. Xoá site WordPress${C_RESET}"
