@@ -8,7 +8,6 @@
 # Các tính năng chính:
 # - Cài đặt LEMP, tạo/xóa/clone/liệt kê site, cài SSL, restart dịch vụ.
 # - Tự động tạo swap, gỡ bỏ Apache, phát hiện Ubuntu 24+.
-# - Tạo FPM Pool và user hệ thống riêng cho mỗi site để tăng cường bảo mật.
 # - Tự động cài đặt danh sách plugin tùy chỉnh khi tạo site mới.
 # ==============================================================================
 
