@@ -275,7 +275,7 @@ EOL
 function list_sites() {
     info "Retrieving list of sites..."
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     if [ ${#sites[@]} -eq 0 ]; then
         warn "No sites found."
         return 1
@@ -291,10 +291,10 @@ function delete_site() {
     info "Starting WordPress site deletion process."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to main menu"
     read -p "Enter your choice: " choice
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; উপমহাদেশ
     if [ "$choice" -eq 0 ]; then info "Deletion cancelled."; return; fi
     local domain="${sites[$((choice-1))]}"
     
@@ -344,7 +344,7 @@ function clone_site() {
     info "Starting WordPress site cloning process."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to main menu"
     read -p "Enter source site choice: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
@@ -375,6 +375,8 @@ function clone_site() {
     info "Creating and setting permissions for new system user..."
     if ! id -u "$new_site_user" >/dev/null 2>&1; then
         sudo useradd -r -s /sbin/nologin -d "$new_webroot" -g nginx "$new_site_user"
+    else
+        warn "User '$new_site_user' already exists. Will use this user."
     fi
     sudo chown -R "$new_site_user":nginx "$new_webroot"
     
@@ -449,7 +451,7 @@ function optimize_wp_cron() {
     info "Optimizing WP-Cron by using a system cron job."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to menu"
     read -p "Select site to optimize WP-Cron: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
@@ -509,6 +511,51 @@ function restart_services() {
     success "Services have been restarted."
 }
 
+# --- NEW FUNCTION FOR CHMOD ---
+function chmod_site_permissions() {
+    info "Starting WordPress site permissions configuration."
+    list_sites || return
+    local sites_path="/etc/nginx/conf.d"
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    echo "   0. 🔙 Back to main menu"
+    read -p "Enter your choice for the site to configure permissions: " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
+    if [ "$choice" -eq 0 ]; then info "Operation cancelled."; return; fi
+    local domain="${sites[$((choice-1))]}"
+    
+    local webroot="/var/www/$domain"
+    local site_user="$domain"
+
+    if [ ! -d "$webroot" ]; then
+        fatal_error "Webroot $webroot does not exist. Cannot set permissions."
+    fi
+
+    info "Applying recommended WordPress permissions for $webroot..."
+
+    # Set directory permissions to 755
+    sudo find "$webroot" -type d -exec chmod 755 {} +
+    # Set file permissions to 644
+    sudo find "$webroot" -type f -exec chmod 644 {} +
+
+    # Set specific permissions for wp-content/uploads (required for media uploads)
+    info "Setting specific permissions for wp-content/uploads to 775..."
+    sudo find "$webroot/wp-content/uploads" -type d -exec chmod 775 {} +
+    sudo find "$webroot/wp-content/uploads" -type f -exec chmod 664 {} +
+
+    # Ensure ownership is correct
+    info "Ensuring correct ownership for $webroot (user: $site_user, group: nginx)..."
+    sudo chown -R "$site_user":nginx "$webroot"
+
+    # Set SELinux context (already handled during site creation, but good to re-apply)
+    info ">> SELinux: Re-applying context for webroot..."
+    sudo semanage fcontext -a -t httpd_sys_rw_content_t "$webroot(/.*)?" || true
+    sudo restorecon -R "$webroot"
+
+    success "Permissions for site '$domain' have been set to recommended WordPress values."
+    warn "It's always recommended to check your specific WordPress setup for any custom permission requirements."
+}
+
+
 # --- MAIN MENU ---
 function main_menu() {
     while true; do
@@ -520,8 +567,9 @@ function main_menu() {
         echo "4. Install SSL for an existing site"
         echo "5. List sites"
         echo "6. Restart services (Nginx, PHP, DB)"
-        echo "7. Optimize WordPress"
+        echo "7. ${C_CYAN}Optimize WordPress${C_RESET}"
         echo -e "${C_YELLOW}8. Delete WordPress site${C_RESET}"
+        echo "9. Configure WordPress Site Permissions (CHMOD)" # <-- New menu item
         echo -e "${C_YELLOW}0. Exit${C_RESET}"
         echo "----------------------------------------"
         read -p "Enter your choice: " choice
@@ -546,6 +594,7 @@ function main_menu() {
             6) restart_services ;;
             7) optimize_menu ;;
             8) delete_site ;;
+            9) chmod_site_permissions ;; # <-- New case
             0)
                 info "Goodbye!"
                 exit 0
