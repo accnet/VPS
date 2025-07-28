@@ -275,7 +275,7 @@ EOL
 function list_sites() {
     info "Retrieving list of sites..."
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     if [ ${#sites[@]} -eq 0 ]; then
         warn "No sites found."
         return 1
@@ -291,7 +291,7 @@ function delete_site() {
     info "Starting WordPress site deletion process."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to main menu"
     read -p "Enter your choice: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
@@ -344,7 +344,7 @@ function clone_site() {
     info "Starting WordPress site cloning process."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to main menu"
     read -p "Enter source site choice: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
@@ -451,7 +451,7 @@ function optimize_wp_cron() {
     info "Optimizing WP-Cron by using a system cron job."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to menu"
     read -p "Select site to optimize WP-Cron: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
@@ -516,7 +516,7 @@ function chmod_site_permissions() {
     info "Starting WordPress site permissions configuration."
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
-    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "default.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
     echo "   0. 🔙 Back to main menu"
     read -p "Enter your choice for the site to configure permissions: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
