@@ -288,6 +288,14 @@ $SALTS
 define( 'WP_DEBUG', false );
 
 /* That's all, stop editing! Happy publishing. */
+define('WP_ALLOW_MULTISITE', true);
+define('MULTISITE', true);
+define('SUBDOMAIN_INSTALL', true); # Luôn là subdomain theo yêu cầu
+define('DOMAIN_CURRENT_SITE', '$MAIN_DOMAIN');
+define('PATH_CURRENT_SITE', '/');
+define('SITE_ID_CURRENT_SITE', 1);
+define('BLOG_ID_CURRENT_SITE', 1);
+define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']);
 
 /** Absolute path to the WordPress directory. */
 if ( ! defined( 'ABSPATH' ) ) {
@@ -297,17 +305,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** Sets up WordPress vars and included files. */
 require_once ABSPATH . 'wp-settings.php';
 
-// Cấu hình Multisite
-define('WP_ALLOW_MULTISITE', true);
-define('MULTISITE', true);
-define('SUBDOMAIN_INSTALL', true); # Luôn là subdomain theo yêu cầu
-define('DOMAIN_CURRENT_SITE', '$MAIN_DOMAIN');
-define('PATH_CURRENT_SITE', '/');
-define('SITE_ID_CURRENT_SITE', 1);
-define('BLOG_ID_CURRENT_SITE', 1);
-
-// Fix lỗi cookie Multisite
-define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']); # Đã thêm dòng này
 
 define('WP_HOME', 'https://' . DOMAIN_CURRENT_SITE);
 define('WP_SITEURL', 'https://' . DOMAIN_CURRENT_SITE);
