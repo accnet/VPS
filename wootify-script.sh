@@ -567,7 +567,7 @@ function main_menu() {
         echo "4. Install SSL for an existing site"
         echo "5. List sites"
         echo "6. Restart services (Nginx, PHP, DB)"
-        echo "7. ${C_CYAN}Optimize WordPress${C_RESET}"
+        echo "7. Optimize WordPress"
         echo -e "${C_YELLOW}8. Delete WordPress site${C_RESET}"
         echo "9. Configure WordPress Site Permissions (CHMOD)"
         echo -e "${C_YELLOW}0. Exit${C_RESET}"
