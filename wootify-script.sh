@@ -93,16 +93,16 @@ function install_lemp() {
     info "Optimizing PHP configuration..."
     local php_ini_path="/etc/php.ini"
     if [ -f "$php_ini_path" ]; then
-        sudo sed -i 's/^;*upload_max_filesize = .*/upload_max_filesize = 512M/' "$php_ini_path"
-        sudo sed -i 's/^;*post_max_size = .*/post_max_size = 512M/' "$php_ini_path"
-        sudo sed -i 's/^;*max_execution_time = .*/max_execution_time = 1800/' "$php_ini_path"
-        sudo sed -i 's/^;*max_input_time = .*/max_input_time = 1800/' "$php_ini_path"
-        sudo sed -i 's/^;*memory_limit = .*/memory_limit = 1024M/' "$php_ini_path"
+        sudo sed -i 's/^;*upload_max_filesize = .*/upload_max_filesize = 128M/' "$php_ini_path"
+        sudo sed -i 's/^;*post_max_size = .*/post_max_size = 128M/' "$php_ini_path"
+        sudo sed -i 's/^;*max_execution_time = .*/max_execution_time = 600/' "$php_ini_path"
+        sudo sed -i 's/^;*max_input_time = .*/max_input_time = 600/' "$php_ini_path"
+        sudo sed -i 's/^;*memory_limit = .*/memory_limit = 128M/' "$php_ini_path"
     fi
     
     info "Optimizing Nginx configuration..."
     local nginx_conf_path="/etc/nginx/nginx.conf"
-    sudo sed -i 's/^\s*worker_connections\s*.*/    worker_connections 10240;/' "$nginx_conf_path"
+    sudo sed -i 's/^\s*worker_connections\s*.*/    worker_connections 1024;/' "$nginx_conf_path"
     sudo sed -i 's/^\s*user\s*.*/user nginx;/' "$nginx_conf_path"
 
     if ! grep -q "client_max_body_size" "$nginx_conf_path"; then
