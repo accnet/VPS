@@ -105,31 +105,36 @@ echo -e "\n${GREEN}--- Bắt đầu cài đặt PHP-FPM ---${NC}"
 # Sử dụng phiên bản PHP 8.2 làm mặc định
 # Đảm bảo php-curl được cài đặt cho kết nối ra ngoài của WordPress
 sudo dnf install @php:8.2 -y
-sudo dnf install php-fpm php-mysqlnd php-gd php-xml php-mbstring php-json php-opcache php-curl php-intl php-zip php-soap php-bcmath php-gmp -y # Đã thêm php-curl
-echo -e "${GREEN}  PHP-FPM và các extension cần thiết (bao gồm php-curl) đã được cài đặt.${NC}"
+sudo dnf install php-fpm php-mysqlnd php-gd php-xml php-mbstring php-json php-opcache php-curl php-intl php-zip php-soap php-bcmath php-gmp -y
+echo -e "${GREEN}  PHP-FPM và các extension cần thiết đã được cài đặt.${NC}"
 
 # Cấu hình PHP-FPM để chạy dưới user nginx
 sudo sed -i 's/user = apache/user = nginx/' /etc/php-fpm.d/www.conf
 sudo sed -i 's/group = apache/group = nginx/' /etc/php-fpm.d/www.conf
 
-sudo systemctl enable php-fpm
-sudo systemctl start php-fpm
+# Tăng giới hạn PHP (php.ini)
+PHP_INI_PATH="/etc/php.ini" # Hoặc đường dẫn php.ini của bạn nếu khác
+
+echo -e "${YELLOW}  Cấu hình giới hạn PHP (php.ini): upload_max_filesize, post_max_size, max_execution_time, max_input_time, memory_limit...${NC}"
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 512M/' "$PHP_INI_PATH"
+sudo sed -i 's/^post_max_size = .*/post_max_size = 512M/' "$PHP_INI_PATH"
+sudo sed -i 's/^max_execution_time = .*/max_execution_time = 600/' "$PHP_INI_PATH" # 10 phút = 600 giây
+sudo sed -i 's/^max_input_time = .*/max_input_time = 600/' "$PHP_INI_PATH"     # 10 phút = 600 giây
+sudo sed -i 's/^memory_limit = .*/memory_limit = 512M/' "$PHP_INI_PATH"
 
 # Cấu hình Opcache (thường đã được bật mặc định khi cài php-opcache, nhưng có thể tối ưu thêm)
-# Đây là cấu hình cơ bản, bạn có thể tinh chỉnh /etc/php.d/10-opcache.ini sau này nếu cần
 if [ -f /etc/php.d/10-opcache.ini ]; then
     echo -e "${YELLOW}  Cấu hình Opcache...${NC}"
-    # Đảm bảo Opcache được bật
     sudo sed -i '/^;opcache.enable=/c\opcache.enable=1' /etc/php.d/10-opcache.ini
-    # Cấu hình bộ nhớ cache (ví dụ 128MB)
-    sudo sed -i '/^;opcache.memory_consumption=/c\opcache.memory_consumption=128' /etc/php.d/10-opcache.ini
-    # Số lượng file tối đa có thể lưu cache
-    sudo sed -i '/^;opcache.max_accelerated_files=/c\opcache.max_accelerated_files=10000' /etc/php.d/10-opcache.ini
-    # Kiểm tra thay đổi file mỗi giây
-    sudo sed -i '/^;opcache.revalidate_freq=/c\opcache.revalidate_freq=0' /etc/php.d/10-opcache.ini # 0 = kiểm tra mỗi request, tốt cho dev, production nên dùng giá trị lớn hơn
+    sudo sed -i '/^;opcache.memory_consumption=/c\opcache.memory_consumption=256' /etc/php.d/10-opcache.ini # Tăng thêm bộ nhớ cho Opcache
+    sudo sed -i '/^;opcache.max_accelerated_files=/c\opcache.max_accelerated_files=20000' /etc/php.d/10-opcache.ini # Tăng số lượng file tối đa
+    sudo sed -i '/^;opcache.revalidate_freq=/c\opcache.revalidate_freq=1' /etc/php.d/10-opcache.ini # Kiểm tra thay đổi mỗi giây (production nên là 0 hoặc giá trị lớn hơn)
+    sudo sed -i '/^;opcache.fast_shutdown=/c\opcache.fast_shutdown=1' /etc/php.d/10-opcache.ini
 fi
 
-sudo systemctl restart php-fpm # Khởi động lại để áp dụng cấu hình Opcache
+sudo systemctl enable php-fpm
+sudo systemctl start php-fpm
+sudo systemctl restart php-fpm # Khởi động lại để áp dụng cấu hình PHP và Opcache
 echo -e "${GREEN}--- Cài đặt PHP-FPM và các extension hoàn tất ---${NC}"
 
 # --- Tạo chứng chỉ SSL tự ký (OpenSSL) ---
@@ -175,6 +180,12 @@ server {
     ssl_ciphers 'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH:!SHA1:!AESCCM';
     ssl_prefer_server_ciphers on;
 
+    # Cấu hình Nginx tăng giới hạn upload và timeout
+    client_max_body_size 512M; # Tăng giới hạn tải lên Nginx
+    send_timeout 600s;          # Tăng timeout gửi/nhận dữ liệu Nginx
+    proxy_read_timeout 600s;    # Tăng timeout đọc từ backend (PHP-FPM) Nginx
+    proxy_send_timeout 600s;    # Tăng timeout gửi đến backend (PHP-FPM) Nginx
+
     # Cấu hình WordPress
     root /var/www/wordpress;
     index index.php index.html index.htm;
@@ -206,6 +217,7 @@ server {
         fastcgi_buffers 4 256k;
         fastcgi_busy_buffers_size 256k;
         fastcgi_temp_file_write_size 256k;
+        fastcgi_read_timeout 600s; # Tăng timeout đọc từ PHP-FPM cho Nginx
     }
 
     # Cấu hình cho XML-RPC (bảo mật)
@@ -215,11 +227,19 @@ server {
         log_not_found off;
     }
 
-    client_max_body_size 100M;
 }
 EOF
 
-echo -e "${GREEN}--- Cấu hình Nginx hoàn tất ---${NC}"
+# Kiểm tra cấu hình Nginx trước khi tải lại
+sudo nginx -t
+if [ $? -eq 0 ]; then
+    sudo systemctl reload nginx # Chỉ reload nếu cấu hình đúng
+    echo -e "${GREEN}--- Cấu hình Nginx đã được kiểm tra và tải lại thành công ---${NC}"
+else
+    echo -e "${RED}--- Lỗi cấu hình Nginx. Vui lòng kiểm tra thủ công. Không tải lại Nginx. ---${NC}"
+    exit 1
+fi
+
 
 # --- Tải và cài đặt WordPress ---
 echo -e "\n${GREEN}--- Bắt đầu cài đặt WordPress ---${NC}"
@@ -260,7 +280,7 @@ sudo restorecon -Rv /var/www/wordpress/wp-content/uploads/
 sudo setsebool -P httpd_can_network_connect_php on
 
 # Cho phép HTTPD kết nối mạng chung (nếu vẫn gặp vấn đề tải xuống)
-sudo setsebool -P httpd_can_network_connect on # Đã thêm dòng này
+sudo setsebool -P httpd_can_network_connect on
 
 echo -e "${GREEN}--- Cấu hình SELinux hoàn tất ---${NC}"
 
@@ -288,6 +308,7 @@ $SALTS
 define( 'WP_DEBUG', false );
 
 /* That's all, stop editing! Happy publishing. */
+// --- Cấu hình Multisite ---
 define('WP_ALLOW_MULTISITE', true);
 define('MULTISITE', true);
 define('SUBDOMAIN_INSTALL', true); # Luôn là subdomain theo yêu cầu
@@ -295,7 +316,13 @@ define('DOMAIN_CURRENT_SITE', '$MAIN_DOMAIN');
 define('PATH_CURRENT_SITE', '/');
 define('SITE_ID_CURRENT_SITE', 1);
 define('BLOG_ID_CURRENT_SITE', 1);
-define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']);
+define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']); # Fix lỗi cookie Multisite
+
+define('WP_HOME', 'https://' . DOMAIN_CURRENT_SITE);
+define('WP_SITEURL', 'https://' . DOMAIN_CURRENT_SITE);
+
+// Tăng giới hạn bộ nhớ nếu cần (tương ứng với PHP memory_limit)
+define('WP_MEMORY_LIMIT', '512M'); # Đã tăng
 
 /** Absolute path to the WordPress directory. */
 if ( ! defined( 'ABSPATH' ) ) {
@@ -306,24 +333,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once ABSPATH . 'wp-settings.php';
 
 
-define('WP_HOME', 'https://' . DOMAIN_CURRENT_SITE);
-define('WP_SITEURL', 'https://' . DOMAIN_CURRENT_SITE);
-
-// Tăng giới hạn bộ nhớ nếu cần
-define('WP_MEMORY_LIMIT', '256M');
-
 EOF
 )
 
 # Ghi nội dung vào wp-config.php
 echo "$WP_CONFIG_CONTENT" | sudo tee /var/www/wordpress/wp-config.php > /dev/null
 echo -e "${GREEN}--- Cấu hình Database và wp-config.php hoàn tất ---${NC}"
-
-# --- Khởi động lại Nginx và PHP-FPM ---
-echo -e "\n${GREEN}--- Khởi động lại Nginx và PHP-FPM ---${NC}"
-sudo systemctl restart nginx
-sudo systemctl restart php-fpm
-echo -e "${GREEN}--- Khởi động lại hoàn tất ---${NC}"
 
 # --- Hoàn tất cài đặt WordPress qua WP-CLI ---
 echo -e "\n${GREEN}--- Hoàn tất cài đặt WordPress Multisite qua WP-CLI ---${NC}"
