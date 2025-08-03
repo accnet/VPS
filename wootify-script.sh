@@ -89,7 +89,7 @@ function install_lemp() {
     sudo dnf module enable "php:remi-${DEFAULT_PHP_VERSION}" -y
 
     info "Installing Nginx, MariaDB, PHP and necessary extensions..."
-    sudo dnf install -y nginx mariadb-server php php-fpm php-mysqlnd php-curl php-xml php-mbstring php-zip php-gd php-intl php-bcmath php-soap php-pecl-imagick php-exif php-opcache php-cli php-readline wget unzip policycoreutils-python-utils openssl cronie
+    sudo dnf install -y nginx mariadb-server php php-fpm php-mysqlnd php-curl php-xml php-mbstring php-zip php-gd php-intl php-bcmath php-soap php-exif php-opcache php-cli php-readline wget unzip policycoreutils-python-utils openssl cronie
 
     info "Optimizing PHP configuration..."
     local php_ini_path="/etc/php.ini"
@@ -253,7 +253,7 @@ EOL
     sudo -u "$site_user" "$WP_CLI_PATH" core config --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --path="$webroot" --skip-check
     sudo -u "$site_user" "$WP_CLI_PATH" core install --url="http://$domain" --title="Website $domain" --admin_user="$admin_user" --admin_password="$admin_pass" --admin_email="$admin_email" --path="$webroot"
     info "Installing and activating desired plugins..."
-    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor wp-mail-smtp classic-widgets wp-fastest-cache code-snippets --activate --path="$webroot"
+    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor wp-mail-smtp classic-widgets wp-fastest-cache --activate --path="$webroot"
     
     info "Creating and setting permissions for WooCommerce log directory..."
     sudo -u "$site_user" mkdir -p "$webroot/wp-content/uploads/wc-logs"
