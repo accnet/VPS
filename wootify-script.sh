@@ -3,7 +3,7 @@
 # ==============================================================================
 # WordPress Management Script for RHEL Stack (AlmaLinux)
 #
-# Version: 4.4-RHEL (Added WordPress Optimization & WP-Cron menu)
+# Version: 4.5-RHEL (Added Redis Cache Integration)
 #
 # Main features:
 # - Install LEMP, create/delete/clone/list sites, install SSL, restart services.
@@ -11,6 +11,7 @@
 # - Automated MariaDB security configuration, create and save root password.
 # - Automatic SELinux context handling for webroot and socket.
 # - Create separate FPM Pool and system user for each site to enhance security.
+# - Optimization features including WP-Cron and Redis Cache.
 # ==============================================================================
 
 # --- SAFE SETTINGS ---
@@ -88,7 +89,7 @@ function install_lemp() {
     sudo dnf module enable "php:remi-${DEFAULT_PHP_VERSION}" -y
 
     info "Installing Nginx, MariaDB, PHP and necessary extensions..."
-    sudo dnf install -y nginx mariadb-server php php-fpm php-mysqlnd php-curl php-xml php-mbstring php-zip php-gd php-intl php-bcmath php-soap php-pecl-imagick php-exif php-opcache php-cli php-readline wget unzip policycoreutils-python-utils openssl cronie
+    sudo dnf install -y nginx mariadb-server php php-fpm php-mysqlnd php-curl php-xml php-mbstring php-zip php-gd php-intl php-bcmath php-soap php-exif php-opcache php-cli php-readline wget unzip policycoreutils-python-utils openssl cronie
 
     info "Optimizing PHP configuration..."
     local php_ini_path="/etc/php.ini"
@@ -252,7 +253,7 @@ EOL
     sudo -u "$site_user" "$WP_CLI_PATH" core config --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --path="$webroot" --skip-check
     sudo -u "$site_user" "$WP_CLI_PATH" core install --url="http://$domain" --title="Website $domain" --admin_user="$admin_user" --admin_password="$admin_pass" --admin_email="$admin_email" --path="$webroot"
     info "Installing and activating desired plugins..."
-    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor wp-mail-smtp classic-widgets wp-fastest-cache code-snippets --activate --path="$webroot"
+    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor wp-mail-smtp classic-widgets --activate --path="$webroot"
     
     info "Creating and setting permissions for WooCommerce log directory..."
     sudo -u "$site_user" mkdir -p "$webroot/wp-content/uploads/wc-logs"
@@ -260,14 +261,14 @@ EOL
     
     success "Site http://$domain created successfully!"
     echo -e "----------------------------------------"
-    echo -e "📁 ${C_BLUE}Webroot:${C_RESET}       $webroot\n🛠️ ${C_BLUE}Database:${C_RESET}    $db_name\n👤 ${C_BLUE}DB User:${C_RESET}       $db_user\n🔑 ${C_BLUE}DB Password:${C_RESET} $db_pass\n👤 ${C_BLUE}WP Admin:${C_RESET}    $admin_user\n🔑 ${C_BLUE}WP Password:${C_RESET} $admin_pass"
+    echo -e "📁 ${C_BLUE}Webroot:${C_RESET}        $webroot\n🛠️ ${C_BLUE}Database:${C_RESET}    $db_name\n👤 ${C_BLUE}DB User:${C_RESET}      $db_user\n🔑 ${C_BLUE}DB Password:${C_RESET} $db_pass\n👤 ${C_BLUE}WP Admin:${C_RESET}    $admin_user\n🔑 ${C_BLUE}WP Password:${C_RESET} $admin_pass"
     echo -e "----------------------------------------"
 
     read -p "🔐 Do you want to install Let's Encrypt SSL for this site? (y/N): " install_ssl_choice
     if [[ "${install_ssl_choice,,}" == "y" ]]; then
         if ! install_ssl "$domain" "$admin_email"; then
             warn "SSL installation failed. Your website was still created successfully at http://$domain."
-            warn "You can try installing SSL later using option 5 in the main menu."
+            warn "You can try installing SSL later using option 4 in the main menu."
         fi
     fi
 }
@@ -282,7 +283,7 @@ function list_sites() {
     fi
     echo "📋 List of existing sites:"
     for i in "${!sites[@]}"; do
-        echo "   $((i+1)). ${sites[$i]}"
+        echo "    $((i+1)). ${sites[$i]}"
     done
     return 0
 }
@@ -292,7 +293,7 @@ function delete_site() {
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
     local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
-    echo "   0. 🔙 Back to main menu"
+    echo "    0. 🔙 Back to main menu"
     read -p "Enter your choice: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
     if [ "$choice" -eq 0 ]; then info "Deletion cancelled."; return; fi
@@ -345,7 +346,7 @@ function clone_site() {
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
     local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
-    echo "   0. 🔙 Back to main menu"
+    echo "    0. 🔙 Back to main menu"
     read -p "Enter source site choice: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
     if [ "$choice" -eq 0 ]; then info "Cloning cancelled."; return; fi
@@ -452,7 +453,7 @@ function optimize_wp_cron() {
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
     local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
-    echo "   0. 🔙 Back to menu"
+    echo "    0. 🔙 Back to menu"
     read -p "Select site to optimize WP-Cron: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
     if [ "$choice" -eq 0 ]; then info "Operation cancelled."; return; fi
@@ -486,17 +487,78 @@ function optimize_wp_cron() {
     fi
 }
 
+function install_redis_cache() {
+    info "Starting Redis Cache installation and configuration..."
+    
+    if ! sudo dnf list installed redis &>/dev/null; then
+        info "Redis server not found. Installing Redis server..."
+        sudo dnf install -y redis
+        sudo systemctl enable --now redis
+        success "Redis server installed and started."
+    else
+        info "Redis server is already installed."
+    fi
+
+    if ! sudo dnf list installed php-pecl-redis &>/dev/null; then
+        info "PHP Redis extension not found. Installing..."
+        sudo dnf install -y php-pecl-redis
+        success "PHP Redis extension installed."
+        info "Restarting PHP-FPM to load the new extension..."
+        sudo systemctl restart php-fpm
+    else
+        info "PHP Redis extension is already installed."
+    fi
+    
+    list_sites || return
+    local sites_path="/etc/nginx/conf.d"
+    local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    echo "    0. 🔙 Back to menu"
+    read -p "Select site to configure Redis Cache for: " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
+    if [ "$choice" -eq 0 ]; then info "Operation cancelled."; return; fi
+    
+    local domain="${sites[$((choice-1))]}"
+    local webroot="/var/www/$domain"
+    local site_user="$domain"
+    
+    if [ ! -d "$webroot/wp-content/plugins/redis-cache" ]; then
+        info "Installing 'Redis Object Cache' plugin..."
+        sudo -u "$site_user" "$WP_CLI_PATH" plugin install redis-cache --activate --path="$webroot"
+        success "Plugin 'Redis Object Cache' installed and activated."
+    else
+        info "Plugin 'Redis Object Cache' is already installed."
+    fi
+    
+    info "Checking wp-config.php for Redis configuration..."
+    if grep -q "WP_REDIS_HOST" "$webroot/wp-config.php"; then
+        warn "Redis configuration already exists in wp-config.php. Skipping."
+    else
+        info "Adding Redis configuration to wp-config.php..."
+        sudo sed -i "/\/\* That's all, stop editing!/i define( 'WP_REDIS_HOST', '127.0.0.1' );\ndefine( 'WP_REDIS_PORT', 6379 );\ndefine( 'WP_CACHE', true );" "$webroot/wp-config.php"
+        success "Redis configuration added to wp-config.php."
+    fi
+    
+    # Enable object cache via WP-CLI
+    info "Enabling Redis object cache using WP-CLI..."
+    sudo -u "$site_user" "$WP_CLI_PATH" redis enable --path="$webroot"
+
+    success "Redis Cache has been successfully configured for '$domain'."
+    warn "You may need to manually flush the cache from the WordPress admin dashboard if needed."
+}
+
 function optimize_menu() {
     while true; do
         clear
         echo -e "\n${C_BLUE}========= WORDPRESS OPTIMIZATION MENU =========${C_RESET}"
         echo "1. Optimize WP-Cron (Separate from user tasks)"
+        echo "2. Install and Configure Redis Object Cache"
         echo "0. 🔙 Back to main menu"
         echo "----------------------------------------"
         read -p "Enter your choice: " choice
 
         case "$choice" in
             1) optimize_wp_cron ;;
+            2) install_redis_cache ;;
             0) return ;;
             *) menu_error "Invalid choice." ;;
         esac
@@ -517,7 +579,7 @@ function chmod_site_permissions() {
     list_sites || return
     local sites_path="/etc/nginx/conf.d"
     local sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
-    echo "   0. 🔙 Back to main menu"
+    echo "    0. 🔙 Back to main menu"
     read -p "Enter your choice for the site to configure permissions: " choice
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then menu_error "Invalid choice."; return; fi
     if [ "$choice" -eq 0 ]; then info "Operation cancelled."; return; fi
@@ -560,7 +622,7 @@ function chmod_site_permissions() {
 function main_menu() {
     while true; do
         clear
-        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.4-RHEL) =========${C_RESET}"
+        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.5-RHEL) =========${C_RESET}"
         echo "1. Install LEMP stack"
         echo "2. Create new WordPress site"
         echo "3. Clone WordPress site"
