@@ -295,6 +295,20 @@ EOL
 
     info "Installing and activating desired plugins..."
     sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor classic-widgets autoptimize wp-fastest-cache wp-mail-smtp redis-cache --activate --path="$webroot"
+    
+    info "Installing and activating Storefront theme as default..."
+    sudo -u "$site_user" "$WP_CLI_PATH" theme install storefront --activate --path="$webroot"
+
+    # ==============================================================================
+    # >>> MODIFICATION START: Clean up default themes and plugins <<<
+    # ==============================================================================
+    info "Cleaning up default themes and plugins..."
+    # Note: Using '|| true' to prevent script from failing if a theme/plugin doesn't exist
+    sudo -u "$site_user" "$WP_CLI_PATH" theme delete twentytwentyfive twentytwentyfour twentytwentythree --path="$webroot" || true
+    sudo -u "$site_user" "$WP_CLI_PATH" plugin delete akismet hello --path="$webroot" || true
+    # ==============================================================================
+    # >>> MODIFICATION END <<<
+    # ==============================================================================
 
     info "Creating and setting permissions for WooCommerce log directory..."
     sudo -u "$site_user" mkdir -p "$webroot/wp-content/uploads/wc-logs"
@@ -525,6 +539,111 @@ install_ssl() {
     fi
 }
 
+install_self_signed_ssl() {
+    info "Bắt đầu cài đặt Self-Signed SSL..."
+    list_sites || return
+
+    local sites_path="/etc/nginx/conf.d"
+    local sites
+    sites=($(find "$sites_path" -maxdepth 1 -type f -name "*.conf" ! -name "php-fpm.conf" -printf "%f\n" | sed 's/\.conf$//'))
+    echo "   0. 🔙 Trở về menu chính"
+
+    read -p "Chọn trang web để cài đặt SSL: " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -gt ${#sites[@]} ]; then
+        menu_error "Lựa chọn không hợp lệ."
+        return
+    fi
+    if [ "$choice" -eq 0 ]; then
+        info "Đã hủy thao tác."
+        return
+    fi
+    local domain="${sites[$((choice - 1))]}"
+
+    info "Đang cài đặt cho tên miền: $domain"
+
+    info "Đảm bảo OpenSSL đã được cài đặt..."
+    sudo dnf install -y openssl
+
+    local key_path="/etc/pki/tls/private/${domain}.key"
+    local cert_path="/etc/pki/tls/certs/${domain}.crt"
+
+    if [ -f "$cert_path" ]; then
+        warn "Chứng chỉ SSL cho $domain dường như đã tồn tồn tại. Bỏ qua bước tạo mới."
+    else
+        info "Tạo chứng chỉ tự ký (Self-Signed) có hiệu lực 365 ngày..."
+        sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$key_path" \
+            -out "$cert_path" \
+            -subj "/CN=$domain"
+    fi
+
+    info "Cập nhật cấu hình Nginx cho $domain..."
+    local nginx_conf="/etc/nginx/conf.d/${domain}.conf"
+    local webroot
+    webroot=$(grep -oP '^\s*root\s+\K[^;]+' "$nginx_conf")
+    local fpm_sock
+    fpm_sock=$(grep -oP '^\s*fastcgi_pass\s+unix:\K[^;]+' "$nginx_conf")
+
+    sudo tee "$nginx_conf" >/dev/null <<EOL
+# Chuyển hướng từ HTTP sang HTTPS
+server {
+    listen 80;
+    server_name $domain www.$domain;
+    return 301 https://\$server_name\$request_uri;
+}
+
+# Cấu hình HTTPS
+server {
+    listen 443 ssl http2;
+    server_name $domain www.$domain;
+    root $webroot;
+    index index.php index.html;
+
+    ssl_certificate $cert_path;
+    ssl_certificate_key $key_path;
+
+    # Cấu hình SSL/TLS tối ưu
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php\$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_pass unix:$fpm_sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOL
+
+    info "Kiểm tra cấu hình Nginx và tải lại dịch vụ..."
+    if ! sudo nginx -t; then
+        fatal_error "Cấu hình Nginx cho $domain không hợp lệ. Vui lòng kiểm tra lại."
+        return 1
+    fi
+    sudo systemctl reload nginx
+
+    info "Cập nhật đường dẫn trong WordPress sang HTTPS..."
+    local site_user
+    site_user=$(stat -c '%U' "$webroot")
+    sudo -u "$site_user" "$WP_CLI_PATH" option update home "https://$domain" --path="$webroot"
+    sudo -u "$site_user" "$WP_CLI_PATH" option update siteurl "https://$domain" --path="$webroot"
+
+    success "Đã cài đặt Self-Signed SSL thành công cho https://$domain"
+    warn "LƯU Ý: Vì đây là chứng chỉ tự ký, trình duyệt sẽ hiển thị cảnh báo bảo mật. Bạn cần chấp nhận rủi ro để tiếp tục."
+}
+
+
 # --- OPTIMIZATION MENU ---
 optimize_wp_cron() {
     info "Optimizing WP-Cron by using a system cron job."
@@ -685,17 +804,18 @@ install_redis() {
 main_menu() {
     while true; do
         clear
-        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.6-RHEL) =========${C_RESET}"
+        echo -e "\n${C_BLUE}========= WORDPRESS MANAGER (v4.7-RHEL) =========${C_RESET}"
         echo "1. Install LEMP stack"
         echo "2. Create new WordPress site"
         echo "3. Clone WordPress site"
-        echo "4. Install SSL for an existing site"
+        echo "4. Install SSL for an existing site (Let's Encrypt)"
         echo "5. List sites"
         echo "6. Restart services (Nginx, PHP, DB)"
         echo "7. Optimize WordPress"
-        echo -e "${C_YELLOW}8. Delete WordPress site${C_RESET}"
+        echo "8. Delete WordPress site"
         echo "9. Configure WordPress Site Permissions (CHMOD)"
         echo "10. Install Redis & PHP-Redis"
+        echo "11. Install Self-Signed SSL (for local/test)"
         echo -e "${C_YELLOW}0. Exit${C_RESET}"
         echo "----------------------------------------"
         read -p "Enter your choice: " choice
@@ -722,6 +842,7 @@ main_menu() {
         8) delete_site ;;
         9) chmod_site_permissions ;;
         10) install_redis ;;
+        11) install_self_signed_ssl ;;
         0)
             info "Goodbye!"
             exit 0
