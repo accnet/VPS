@@ -294,7 +294,7 @@ EOL
     sudo -u "$site_user" "$WP_CLI_PATH" core install --url="http://$domain" --title="Website $domain" --admin_user="$admin_user" --admin_password="$admin_pass" --admin_email="$admin_email" --path="$webroot"
 
     info "Installing and activating desired plugins..."
-    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor classic-widgets --activate --path="$webroot"
+    sudo -u "$site_user" "$WP_CLI_PATH" plugin install contact-form-7 woocommerce classic-editor classic-widgets wp-optimize wp-fastest-cache wp-mail-smtp --activate --path="$webroot"
 
     info "Creating and setting permissions for WooCommerce log directory..."
     sudo -u "$site_user" mkdir -p "$webroot/wp-content/uploads/wc-logs"
