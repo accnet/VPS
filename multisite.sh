@@ -1,94 +1,94 @@
 #!/bin/bash
 
-# --- Biến màu sắc cho output ---
+# --- Color variables for output ---
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Bắt đầu quá trình cài đặt LEMP + WordPress Multisite trên AlmaLinux...${NC}"
+echo -e "${YELLOW}Starting LEMP + WordPress Multisite installation process on AlmaLinux...${NC}"
 
-# --- Yêu cầu quyền root ---
+# --- Require root privileges ---
 if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}Script này phải được chạy với quyền root. Vui lòng chạy lại với 'sudo'.${NC}"
+   echo -e "${RED}This script must be run with root privileges. Please run again with 'sudo'.${NC}"
    exit 1
 fi
 
-# --- Hỏi thông tin cần thiết từ người dùng ---
-echo -e "${YELLOW}Vui lòng cung cấp các thông tin sau:${NC}"
-read -p "  1. Tên miền chính của bạn (ví dụ: yourdomain.com): " MAIN_DOMAIN
-read -p "  2. Tên người dùng admin cho WordPress: " WP_ADMIN_USER
-read -s -p "  3. Mật khẩu admin cho WordPress: " WP_ADMIN_PASS
+# --- Gather required information from user ---
+echo -e "${YELLOW}Please provide the following information:${NC}"
+read -p "  1. Your main domain name (e.g.: yourdomain.com): " MAIN_DOMAIN
+read -p "  2. WordPress admin username: " WP_ADMIN_USER
+read -s -p "  3. WordPress admin password: " WP_ADMIN_PASS
 echo
-read -p "  4. Địa chỉ email admin cho WordPress: " WP_ADMIN_EMAIL
+read -p "  4. WordPress admin email address: " WP_ADMIN_EMAIL
 
-# Tạo mật khẩu ngẫu nhiên cho người dùng root của MariaDB
-MARIADB_ROOT_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9!@#$%^&*()_+-=[]{}|;:,.<>? | head -c 20)
-echo -e "${GREEN}  Mật khẩu ngẫu nhiên cho người dùng root MariaDB đã được tạo.${NC}"
+# Generate random password for MariaDB root user
+MARIADB_ROOT_PASSWORD=$(head /dev/urandom | tr -dc 'A-Za-z0-9!@#$%^&*()_+-=[]{}|;:,.<>?' | head -c 20)
+echo -e "${GREEN}  Random password for MariaDB root user has been generated.${NC}"
 
-# Tạo mật khẩu ngẫu nhiên cho người dùng database WordPress
-DB_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9!@#$%^&*()_+-=[]{}|;:,.<>? | head -c 16)
-echo -e "${GREEN}  Mật khẩu ngẫu nhiên cho người dùng database WordPress đã được tạo.${NC}"
+# Generate random password for WordPress database user
+DB_PASSWORD=$(head /dev/urandom | tr -dc 'A-Za-z0-9!@#$%^&*()_+-=[]{}|;:,.<>?' | head -c 16)
+echo -e "${GREEN}  Random password for WordPress database user has been generated.${NC}"
 
-# --- Cập nhật hệ thống và cài đặt công cụ ---
-echo -e "\n${GREEN}--- Bắt đầu cập nhật hệ thống và cài đặt công cụ ---${NC}"
+# --- Update system and install tools ---
+echo -e "\n${GREEN}--- Starting system update and tool installation ---${NC}"
 sudo dnf update -y
 sudo dnf install epel-release -y
-sudo dnf install wget curl unzip policycoreutils-python-utils -y # policycoreutils-python-utils cho semanage
-echo -e "${GREEN}--- Cập nhật hệ thống và cài đặt công cụ hoàn tất ---${NC}"
+sudo dnf install wget curl unzip policycoreutils-python-utils -y # policycoreutils-python-utils for semanage
+echo -e "${GREEN}--- System update and tool installation completed ---${NC}"
 
-# --- Cài đặt và cấu hình Firewalld ---
-echo -e "\n${GREEN}--- Bắt đầu cài đặt và cấu hình Firewalld ---${NC}"
+# --- Install and configure Firewalld ---
+echo -e "\n${GREEN}--- Starting Firewalld installation and configuration ---${NC}"
 sudo dnf install firewalld -y
 sudo systemctl enable firewalld
 sudo systemctl start firewalld
-echo -e "${GREEN}  Firewalld đã được cài đặt và khởi chạy.${NC}"
+echo -e "${GREEN}  Firewalld has been installed and started.${NC}"
 
-# Mở cổng cho HTTP/HTTPS (inbound)
+# Open ports for HTTP/HTTPS (inbound)
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --permanent --add-service=https
 
-# Mở cổng cho kết nối đi ra (outbound) để WordPress có thể tải plugin/theme
-echo -e "${YELLOW}  Cấu hình firewall cho kết nối đi ra (outbound) để WordPress tải plugin/theme...${NC}"
+# Open ports for outbound connections so WordPress can download plugins/themes
+echo -e "${YELLOW}  Configuring firewall for outbound connections so WordPress can download plugins/themes...${NC}"
 sudo firewall-cmd --permanent --add-port=53/udp  # DNS
 sudo firewall-cmd --permanent --add-port=80/tcp   # HTTP outbound
 sudo firewall-cmd --permanent --add-port=443/tcp  # HTTPS outbound
 
 sudo firewall-cmd --reload
-echo -e "${GREEN}--- Cấu hình Firewalld hoàn tất ---${NC}"
+echo -e "${GREEN}--- Firewalld configuration completed ---${NC}"
 
-# --- Cài đặt Nginx ---
-echo -e "\n${GREEN}--- Bắt đầu cài đặt Nginx ---${NC}"
+# --- Install Nginx ---
+echo -e "\n${GREEN}--- Starting Nginx installation ---${NC}"
 sudo dnf install nginx -y
 sudo systemctl enable nginx
 sudo systemctl start nginx
-echo -e "${GREEN}--- Cài đặt Nginx hoàn tất ---${NC}"
+echo -e "${GREEN}--- Nginx installation completed ---${NC}"
 
-# --- Cài đặt MariaDB ---
-echo -e "\n${GREEN}--- Bắt đầu cài đặt MariaDB ---${NC}"
+# --- Install MariaDB ---
+echo -e "\n${GREEN}--- Starting MariaDB installation ---${NC}"
 sudo dnf install mariadb-server -y
 sudo systemctl enable mariadb
 sudo systemctl start mariadb
 
-echo -e "${YELLOW}Thiết lập database và người dùng...${NC}"
+echo -e "${YELLOW}Setting up database and users...${NC}"
 
-# Lưu mật khẩu root MariaDB vào ~/.my.cnf cho người dùng root
+# Save MariaDB root password to ~/.my.cnf for root user
 sudo tee /root/.my.cnf > /dev/null <<EOF
 [client]
 user=root
 password="$MARIADB_ROOT_PASSWORD"
 EOF
 sudo chmod 600 /root/.my.cnf
-echo -e "${GREEN}  Mật khẩu root MariaDB đã được lưu vào /root/.my.cnf.${NC}"
+echo -e "${GREEN}  MariaDB root password has been saved to /root/.my.cnf.${NC}"
 
 
-# Thiết lập mật khẩu root cho MariaDB.
+# Set root password for MariaDB.
 sudo mysql -u root <<MYSQL_ROOT_SETUP
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$MARIADB_ROOT_PASSWORD';
 FLUSH PRIVILEGES;
 MYSQL_ROOT_SETUP
 
-# Tạo database và người dùng WordPress
+# Create WordPress database and user
 DB_NAME="wordpress_multisite"
 DB_USER="wpuser"
 sudo mysql -u root <<MYSQL_WP_SETUP
@@ -98,47 +98,47 @@ GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 MYSQL_WP_SETUP
 
-echo -e "${GREEN}--- Cài đặt MariaDB hoàn tất ---${NC}"
+echo -e "${GREEN}--- MariaDB installation completed ---${NC}"
 
-# --- Cài đặt PHP-FPM ---
-echo -e "\n${GREEN}--- Bắt đầu cài đặt PHP-FPM ---${NC}"
-# Sử dụng phiên bản PHP 8.2 làm mặc định
-# Đảm bảo php-curl được cài đặt cho kết nối ra ngoài của WordPress
+# --- Install PHP-FPM ---
+echo -e "\n${GREEN}--- Starting PHP-FPM installation ---${NC}"
+# Use PHP 8.2 as default version
+# Ensure php-curl is installed for WordPress external connections
 sudo dnf install @php:8.2 -y
 sudo dnf install php-fpm php-mysqlnd php-gd php-xml php-mbstring php-json php-opcache php-curl php-intl php-zip php-soap php-bcmath php-gmp -y
-echo -e "${GREEN}  PHP-FPM và các extension cần thiết đã được cài đặt.${NC}"
+echo -e "${GREEN}  PHP-FPM and required extensions have been installed.${NC}"
 
-# Cấu hình PHP-FPM để chạy dưới user nginx
+# Configure PHP-FPM to run under nginx user
 sudo sed -i 's/user = apache/user = nginx/' /etc/php-fpm.d/www.conf
 sudo sed -i 's/group = apache/group = nginx/' /etc/php-fpm.d/www.conf
 
-# Tăng giới hạn PHP (php.ini)
-PHP_INI_PATH="/etc/php.ini" # Hoặc đường dẫn php.ini của bạn nếu khác
+# Increase PHP limits (php.ini)
+PHP_INI_PATH="/etc/php.ini" # Or your php.ini path if different
 
-echo -e "${YELLOW}  Cấu hình giới hạn PHP (php.ini): upload_max_filesize, post_max_size, max_execution_time, max_input_time, memory_limit...${NC}"
+echo -e "${YELLOW}  Configuring PHP limits (php.ini): upload_max_filesize, post_max_size, max_execution_time, max_input_time, memory_limit...${NC}"
 sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 512M/' "$PHP_INI_PATH"
 sudo sed -i 's/^post_max_size = .*/post_max_size = 512M/' "$PHP_INI_PATH"
-sudo sed -i 's/^max_execution_time = .*/max_execution_time = 600/' "$PHP_INI_PATH" # 10 phút = 600 giây
-sudo sed -i 's/^max_input_time = .*/max_input_time = 600/' "$PHP_INI_PATH"     # 10 phút = 600 giây
+sudo sed -i 's/^max_execution_time = .*/max_execution_time = 600/' "$PHP_INI_PATH" # 10 minutes = 600 seconds
+sudo sed -i 's/^max_input_time = .*/max_input_time = 600/' "$PHP_INI_PATH"     # 10 minutes = 600 seconds
 sudo sed -i 's/^memory_limit = .*/memory_limit = 512M/' "$PHP_INI_PATH"
 
-# Cấu hình Opcache (thường đã được bật mặc định khi cài php-opcache, nhưng có thể tối ưu thêm)
+# Configure Opcache (usually enabled by default when php-opcache is installed, but can be optimized further)
 if [ -f /etc/php.d/10-opcache.ini ]; then
-    echo -e "${YELLOW}  Cấu hình Opcache...${NC}"
+    echo -e "${YELLOW}  Configuring Opcache...${NC}"
     sudo sed -i '/^;opcache.enable=/c\opcache.enable=1' /etc/php.d/10-opcache.ini
-    sudo sed -i '/^;opcache.memory_consumption=/c\opcache.memory_consumption=256' /etc/php.d/10-opcache.ini # Tăng thêm bộ nhớ cho Opcache
-    sudo sed -i '/^;opcache.max_accelerated_files=/c\opcache.max_accelerated_files=20000' /etc/php.d/10-opcache.ini # Tăng số lượng file tối đa
-    sudo sed -i '/^;opcache.revalidate_freq=/c\opcache.revalidate_freq=1' /etc/php.d/10-opcache.ini # Kiểm tra thay đổi mỗi giây (production nên là 0 hoặc giá trị lớn hơn)
+    sudo sed -i '/^;opcache.memory_consumption=/c\opcache.memory_consumption=256' /etc/php.d/10-opcache.ini # Increase Opcache memory
+    sudo sed -i '/^;opcache.max_accelerated_files=/c\opcache.max_accelerated_files=20000' /etc/php.d/10-opcache.ini # Increase max files
+    sudo sed -i '/^;opcache.revalidate_freq=/c\opcache.revalidate_freq=1' /etc/php.d/10-opcache.ini # Check for changes every second (production should be 0 or higher value)
     sudo sed -i '/^;opcache.fast_shutdown=/c\opcache.fast_shutdown=1' /etc/php.d/10-opcache.ini
 fi
 
 sudo systemctl enable php-fpm
 sudo systemctl start php-fpm
-sudo systemctl restart php-fpm # Khởi động lại để áp dụng cấu hình PHP và Opcache
-echo -e "${GREEN}--- Cài đặt PHP-FPM và các extension hoàn tất ---${NC}"
+sudo systemctl restart php-fpm # Restart to apply PHP and Opcache configuration
+echo -e "${GREEN}--- PHP-FPM and extensions installation completed ---${NC}"
 
-# --- Tạo chứng chỉ SSL tự ký (OpenSSL) ---
-echo -e "\n${GREEN}--- Bắt đầu tạo chứng chỉ SSL tự ký ---${NC}"
+# --- Create self-signed SSL certificate (OpenSSL) ---
+echo -e "\n${GREEN}--- Starting self-signed SSL certificate creation ---${NC}"
 sudo mkdir -p /etc/nginx/ssl
 sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
 -keyout /etc/nginx/ssl/$MAIN_DOMAIN.key \
@@ -146,10 +146,10 @@ sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
 -subj "/C=VN/ST=Hanoi/L=Hanoi/O=YourCompany/OU=IT/CN=$MAIN_DOMAIN"
 
 sudo chmod 600 /etc/nginx/ssl/$MAIN_DOMAIN.key
-echo -e "${GREEN}--- Tạo chứng chỉ SSL tự ký hoàn tất ---${NC}"
+echo -e "${GREEN}--- Self-signed SSL certificate creation completed ---${NC}"
 
-# --- Cấu hình Nginx cho WordPress Multisite (Default Server Block) ---
-echo -e "\n${GREEN}--- Cấu hình Nginx cho WordPress Multisite ---${NC}"
+# --- Configure Nginx for WordPress Multisite (Default Server Block) ---
+echo -e "\n${GREEN}--- Configuring Nginx for WordPress Multisite ---${NC}"
 NGINX_CONF_PATH="/etc/nginx/conf.d/wordpress-multisite.conf"
 
 sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
@@ -160,7 +160,7 @@ server {
     listen 80 default_server;
     listen [::]:80 default_server;
 
-    # Chuyển hướng tất cả HTTP sang HTTPS
+    # Redirect all HTTP to HTTPS
     return 301 https://\$host\$request_uri;
 }
 
@@ -169,40 +169,40 @@ server {
     listen 443 ssl http2 default_server;
     listen [::]:443 ssl http2 default_server;
 
-    # Cấu hình SSL (dùng chứng chỉ tự ký)
+    # SSL configuration (using self-signed certificate)
     ssl_certificate /etc/nginx/ssl/$MAIN_DOMAIN.crt;
     ssl_certificate_key /etc/nginx/ssl/$MAIN_DOMAIN.key;
 
-    # Các cài đặt SSL tối ưu khác
+    # Other optimized SSL settings
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers 'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH:!SHA1:!AESCCM';
     ssl_prefer_server_ciphers on;
 
-    # Cấu hình Nginx tăng giới hạn upload và timeout
-    client_max_body_size 512M; # Tăng giới hạn tải lên Nginx
-    send_timeout 600s;          # Tăng timeout gửi/nhận dữ liệu Nginx
-    proxy_read_timeout 600s;    # Tăng timeout đọc từ backend (PHP-FPM) Nginx
-    proxy_send_timeout 600s;    # Tăng timeout gửi đến backend (PHP-FPM) Nginx
+    # Configure Nginx to increase upload limits and timeout
+    client_max_body_size 512M; # Increase Nginx upload limit
+    send_timeout 600s;          # Increase Nginx send/receive data timeout
+    proxy_read_timeout 600s;    # Increase timeout reading from backend (PHP-FPM) Nginx
+    proxy_send_timeout 600s;    # Increase timeout sending to backend (PHP-FPM) Nginx
 
-    # Cấu hình WordPress
+    # WordPress configuration
     root /var/www/wordpress;
     index index.php index.html index.htm;
 
-    # Cấu hình cho file dotfiles (vd: .htaccess)
+    # Configuration for dotfiles (e.g. .htaccess)
     location ~ /\. {
         deny all;
     }
 
-    # Cấu hình cho media files (tăng hiệu suất)
+    # Configuration for media files (performance improvement)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico)$ {
         expires max;
         log_not_found off;
         access_log off;
     }
 
-    # Rewrite rules cho WordPress Multisite
+    # Rewrite rules for WordPress Multisite
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
     }
@@ -210,17 +210,17 @@ server {
     # Pass PHP scripts to PHP-FPM
     location ~ \.php\$ {
         include fastcgi_params;
-        fastcgi_pass unix:/run/php-fpm/www.sock; # Đường dẫn socket PHP-FPM
+        fastcgi_pass unix:/run/php-fpm/www.sock; # PHP-FPM socket path
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         fastcgi_buffer_size 128k;
         fastcgi_buffers 4 256k;
         fastcgi_busy_buffers_size 256k;
         fastcgi_temp_file_write_size 256k;
-        fastcgi_read_timeout 600s; # Tăng timeout đọc từ PHP-FPM cho Nginx
+        fastcgi_read_timeout 600s; # Increase timeout reading from PHP-FPM for Nginx
     }
 
-    # Cấu hình cho XML-RPC (bảo mật)
+    # Configuration for XML-RPC (security)
     location = /xmlrpc.php {
         deny all;
         access_log off;
@@ -230,19 +230,19 @@ server {
 }
 EOF
 
-# Kiểm tra cấu hình Nginx trước khi tải lại
+# Check Nginx configuration before reloading
 sudo nginx -t
 if [ $? -eq 0 ]; then
-    sudo systemctl reload nginx # Chỉ reload nếu cấu hình đúng
-    echo -e "${GREEN}--- Cấu hình Nginx đã được kiểm tra và tải lại thành công ---${NC}"
+    sudo systemctl reload nginx # Only reload if configuration is correct
+    echo -e "${GREEN}--- Nginx configuration has been checked and reloaded successfully ---${NC}"
 else
-    echo -e "${RED}--- Lỗi cấu hình Nginx. Vui lòng kiểm tra thủ công. Không tải lại Nginx. ---${NC}"
+    echo -e "${RED}--- Nginx configuration error. Please check manually. Not reloading Nginx. ---${NC}"
     exit 1
 fi
 
 
-# --- Tải và cài đặt WordPress ---
-echo -e "\n${GREEN}--- Bắt đầu cài đặt WordPress ---${NC}"
+# --- Download and install WordPress ---
+echo -e "\n${GREEN}--- Starting WordPress installation ---${NC}"
 sudo mkdir -p /var/www/wordpress
 sudo chown nginx:nginx /var/www/wordpress
 
@@ -251,47 +251,47 @@ wget https://wordpress.org/latest.tar.gz
 tar -xzf latest.tar.gz
 sudo mv wordpress/* /var/www/wordpress/
 
-# --- Thiết lập quyền tệp và thư mục WordPress ---
-echo -e "\n${GREEN}--- Thiết lập quyền tệp và thư mục WordPress ---${NC}"
+# --- Set WordPress file and directory permissions ---
+echo -e "\n${GREEN}--- Setting WordPress file and directory permissions ---${NC}"
 sudo chown -R nginx:nginx /var/www/wordpress
 sudo find /var/www/wordpress -type d -exec chmod 755 {} \;
 sudo find /var/www/wordpress -type f -exec chmod 644 {} \;
 
-# Thêm quyền cho thư mục uploads và wc-logs cụ thể
-echo -e "${YELLOW}  Đặt quyền ghi cho thư mục uploads và wc-logs...${NC}"
-# Đảm bảo thư mục uploads tồn tại trước khi thay đổi quyền
+# Add specific permissions for uploads and wc-logs directories
+echo -e "${YELLOW}  Setting write permissions for uploads and wc-logs directories...${NC}"
+# Ensure uploads directory exists before changing permissions
 sudo mkdir -p /var/www/wordpress/wp-content/uploads/wc-logs
 sudo chown -R nginx:nginx /var/www/wordpress/wp-content/uploads/
 sudo find /var/www/wordpress/wp-content/uploads/ -type d -exec chmod 755 {} \;
 sudo find /var/www/wordpress/wp-content/uploads/ -type f -exec chmod 644 {} \;
-echo -e "${GREEN}--- Thiết lập quyền hoàn tất ---${NC}"
+echo -e "${GREEN}--- Permission setup completed ---${NC}"
 
-# --- Cấu hình SELinux cho WordPress ---
-echo -e "\n${GREEN}--- Cấu hình SELinux cho WordPress ---${NC}"
-# Đặt ngữ cảnh cho thư mục WordPress
+# --- Configure SELinux for WordPress ---
+echo -e "\n${GREEN}--- Configuring SELinux for WordPress ---${NC}"
+# Set context for WordPress directory
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/wordpress(/.*)?"
 sudo restorecon -Rv /var/www/wordpress
 
-# Đặt ngữ cảnh cụ thể cho thư mục uploads nếu cần
+# Set specific context for uploads directory if needed
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/wordpress/wp-content/uploads(/.*)?"
 sudo restorecon -Rv /var/www/wordpress/wp-content/uploads/
 
-# Cho phép Nginx kết nối đến PHP-FPM
+# Allow Nginx to connect to PHP-FPM
 sudo setsebool -P httpd_can_network_connect_php on
 
-# Cho phép HTTPD kết nối mạng chung (nếu vẫn gặp vấn đề tải xuống)
+# Allow HTTPD to connect to general network (if still having download issues)
 sudo setsebool -P httpd_can_network_connect on
 
-echo -e "${GREEN}--- Cấu hình SELinux hoàn tất ---${NC}"
+echo -e "${GREEN}--- SELinux configuration completed ---${NC}"
 
-# --- Cấu hình Database và wp-config.php ---
-echo -e "\n${GREEN}--- Cấu hình Database và wp-config.php ---${NC}"
-# Sử dụng DB_NAME và DB_USER đã được định nghĩa ở trên
+# --- Configure Database and wp-config.php ---
+echo -e "\n${GREEN}--- Configuring Database and wp-config.php ---${NC}"
+# Use DB_NAME and DB_USER already defined above
 
-# Tải salts từ WordPress API
+# Download salts from WordPress API
 SALTS=$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)
 
-# Tạo nội dung wp-config.php
+# Create wp-config.php content
 WP_CONFIG_CONTENT=$(cat <<EOF
 <?php
 define( 'DB_NAME', '$DB_NAME' );
@@ -308,21 +308,21 @@ $SALTS
 define( 'WP_DEBUG', false );
 
 /* That's all, stop editing! Happy publishing. */
-// --- Cấu hình Multisite ---
+// --- Multisite Configuration ---
 define('WP_ALLOW_MULTISITE', true);
 define('MULTISITE', true);
-define('SUBDOMAIN_INSTALL', true); # Luôn là subdomain theo yêu cầu
+define('SUBDOMAIN_INSTALL', true); # Always subdomain as requested
 define('DOMAIN_CURRENT_SITE', '$MAIN_DOMAIN');
 define('PATH_CURRENT_SITE', '/');
 define('SITE_ID_CURRENT_SITE', 1);
 define('BLOG_ID_CURRENT_SITE', 1);
-define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']); # Fix lỗi cookie Multisite
+define('COOKIE_DOMAIN', \$_SERVER['HTTP_HOST']); # Fix Multisite cookie issue
 
 define('WP_HOME', 'https://' . DOMAIN_CURRENT_SITE);
 define('WP_SITEURL', 'https://' . DOMAIN_CURRENT_SITE);
 
-// Tăng giới hạn bộ nhớ nếu cần (tương ứng với PHP memory_limit)
-define('WP_MEMORY_LIMIT', '512M'); # Đã tăng
+// Increase memory limit if needed (corresponds to PHP memory_limit)
+define('WP_MEMORY_LIMIT', '512M'); # Increased
 
 /** Absolute path to the WordPress directory. */
 if ( ! defined( 'ABSPATH' ) ) {
@@ -336,60 +336,60 @@ require_once ABSPATH . 'wp-settings.php';
 EOF
 )
 
-# Ghi nội dung vào wp-config.php
+# Write content to wp-config.php
 echo "$WP_CONFIG_CONTENT" | sudo tee /var/www/wordpress/wp-config.php > /dev/null
-echo -e "${GREEN}--- Cấu hình Database và wp-config.php hoàn tất ---${NC}"
+echo -e "${GREEN}--- Database and wp-config.php configuration completed ---${NC}"
 
-# --- Hoàn tất cài đặt WordPress qua WP-CLI ---
-echo -e "\n${GREEN}--- Hoàn tất cài đặt WordPress Multisite qua WP-CLI ---${NC}"
-# Tải và cài đặt WP-CLI
+# --- Complete WordPress Multisite installation via WP-CLI ---
+echo -e "\n${GREEN}--- Completing WordPress Multisite installation via WP-CLI ---${NC}"
+# Download and install WP-CLI
 curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
 chmod +x wp-cli.phar
 sudo mv wp-cli.phar /usr/local/bin/wp
 
-# Sửa lỗi "wp: command not found" bằng cách chỉ định đường dẫn đầy đủ
+# Fix "wp: command not found" error by specifying full path
 WP_CLI_PATH="/usr/local/bin/wp"
 
-# Chạy cài đặt WordPress (site chính)
+# Run WordPress installation (main site)
 sudo -u nginx "$WP_CLI_PATH" core install \
     --url="https://$MAIN_DOMAIN" \
-    --title="WordPress Multisite của tôi" \
+    --title="My WordPress Multisite" \
     --admin_user="$WP_ADMIN_USER" \
     --admin_password="$WP_ADMIN_PASS" \
     --admin_email="$WP_ADMIN_EMAIL" \
     --allow-root --path=/var/www/wordpress
 
-# Kích hoạt Multisite ở cấp độ database
+# Enable Multisite at database level
 sudo -u nginx "$WP_CLI_PATH" core multisite-install \
     --url="https://$MAIN_DOMAIN" \
-    --title="WordPress Multisite của tôi" \
+    --title="My WordPress Multisite" \
     --admin_user="$WP_ADMIN_USER" \
     --admin_password="$WP_ADMIN_PASS" \
     --admin_email="$WP_ADMIN_EMAIL" \
     --allow-root --path=/var/www/wordpress \
     --skip-config
 
-echo -e "${GREEN}--- Cài đặt WordPress Multisite hoàn tất ---${NC}"
+echo -e "${GREEN}--- WordPress Multisite installation completed ---${NC}"
 
 echo -e "\n${YELLOW}====================================================${NC}"
-echo -e "${GREEN}CÀI ĐẶT THÀNH CÔNG!${NC}"
+echo -e "${GREEN}INSTALLATION SUCCESSFUL!${NC}"
 echo -e "${YELLOW}====================================================${NC}"
-echo -e "Bạn đã cài đặt thành công LEMP + WordPress Multisite dạng subdomain."
-echo -e "Tên miền chính của bạn: ${GREEN}https://$MAIN_DOMAIN${NC}"
-echo -e "Người dùng admin WordPress: ${GREEN}$WP_ADMIN_USER${NC}"
-echo -e "Mật khẩu admin WordPress: ${GREEN}$WP_ADMIN_PASS${NC}"
-echo -e "Mật khẩu database WordPress (lưu trữ an toàn): ${GREEN}$DB_PASSWORD${NC}"
-echo -e "Mật khẩu root MariaDB (lưu trữ an toàn): ${GREEN}$MARIADB_ROOT_PASSWORD${NC}"
-echo -e "\n${YELLOW}CÁC BƯỚC TIẾP THEO RẤT QUAN TRỌNG:${NC}"
-echo -e "1.  Đăng nhập vào tài khoản ${YELLOW}Cloudflare${NC} của bạn."
-echo -e "2.  Thêm ${YELLOW}$MAIN_DOMAIN${NC} vào Cloudflare (nếu chưa có)."
-echo -e "3.  Cập nhật bản ghi DNS của bạn trong Cloudflare:"
-echo -e "    -   Tạo bản ghi ${YELLOW}A${NC} cho ${YELLOW}$MAIN_DOMAIN${NC} trỏ đến IP máy chủ của bạn. ${RED}BẬT PROXY (biểu tượng đám mây cam) cho bản ghi này.${NC}"
-echo -e "    -   Tạo bản ghi ${YELLOW}A${NC} (hoặc CNAME) ${YELLOW}WILDCARD (*)${NC} trỏ đến IP máy chủ của bạn (hoặc CNAME đến ${YELLOW}$MAIN_DOMAIN${NC}). ${RED}BẬT PROXY (biểu tượng đám mây cam) cho bản ghi này.${NC}"
-echo -e "4.  Trong Cloudflare, điều hướng đến ${YELLOW}SSL/TLS > Overview${NC} và chọn chế độ ${YELLOW}Full${NC} (ĐỪNG chọn Full Strict)."
-echo -e "5.  Chuyển Nameservers của tên miền của bạn về Cloudflare."
-echo -e "\nSau khi các thay đổi DNS có hiệu lực, bạn có thể truy cập:"
-echo -e "Trang web chính: ${GREEN}https://$MAIN_DOMAIN${NC}"
-echo -e "Trang quản trị WordPress: ${GREEN}https://$MAIN_DOMAIN/wp-admin${NC}"
-echo -e "\nKhi bạn thêm các site con mới (ví dụ: ${YELLOW}newsite.$MAIN_DOMAIN${NC}) từ trang quản trị WordPress, chúng sẽ tự động hoạt động và được bảo mật bởi Cloudflare mà không cần cấu hình Nginx thêm!"
+echo -e "You have successfully installed LEMP + WordPress Multisite with subdomain configuration."
+echo -e "Your main domain: ${GREEN}https://$MAIN_DOMAIN${NC}"
+echo -e "WordPress admin user: ${GREEN}$WP_ADMIN_USER${NC}"
+echo -e "WordPress admin password: ${GREEN}$WP_ADMIN_PASS${NC}"
+echo -e "WordPress database password (store securely): ${GREEN}$DB_PASSWORD${NC}"
+echo -e "MariaDB root password (store securely): ${GREEN}$MARIADB_ROOT_PASSWORD${NC}"
+echo -e "\n${YELLOW}VERY IMPORTANT NEXT STEPS:${NC}"
+echo -e "1.  Log in to your ${YELLOW}Cloudflare${NC} account."
+echo -e "2.  Add ${YELLOW}$MAIN_DOMAIN${NC} to Cloudflare (if not already added)."
+echo -e "3.  Update your DNS records in Cloudflare:"
+echo -e "    -   Create an ${YELLOW}A${NC} record for ${YELLOW}$MAIN_DOMAIN${NC} pointing to your server IP. ${RED}ENABLE PROXY (orange cloud icon) for this record.${NC}"
+echo -e "    -   Create a ${YELLOW}WILDCARD (*)${NC} ${YELLOW}A${NC} record (or CNAME) pointing to your server IP (or CNAME to ${YELLOW}$MAIN_DOMAIN${NC}). ${RED}ENABLE PROXY (orange cloud icon) for this record.${NC}"
+echo -e "4.  In Cloudflare, navigate to ${YELLOW}SSL/TLS > Overview${NC} and select ${YELLOW}Full${NC} mode (DON'T select Full Strict)."
+echo -e "5.  Change your domain's nameservers to Cloudflare."
+echo -e "\nAfter DNS changes take effect, you can access:"
+echo -e "Main website: ${GREEN}https://$MAIN_DOMAIN${NC}"
+echo -e "WordPress admin panel: ${GREEN}https://$MAIN_DOMAIN/wp-admin${NC}"
+echo -e "\nWhen you add new subsites (e.g.: ${YELLOW}newsite.$MAIN_DOMAIN${NC}) from the WordPress admin panel, they will automatically work and be secured by Cloudflare without additional Nginx configuration!"
 echo -e "${YELLOW}====================================================${NC}"
